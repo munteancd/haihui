@@ -31,6 +31,7 @@ export function createGame({ variant, numTurns, seed, players, cities }) {
     phase: 'placing',          // 'placing' | 'challenge_window' | 'checkpoint' | 'ended'
     checkpointEvery: CHECKPOINT_EVERY,
     checkpointEstimates: {},   // playerId -> guessed wrong-count during a checkpoint
+    lastCheckpointAt: 0,       // cardsPlayed value of the last resolved checkpoint
   };
 }
 
@@ -120,7 +121,11 @@ function boardWrongCount(state) {
 }
 
 export function needsCheckpoint(state) {
-  return state.cardsPlayed > 0 && state.cardsPlayed % state.checkpointEvery === 0;
+  return (
+    state.cardsPlayed > 0 &&
+    state.cardsPlayed % state.checkpointEvery === 0 &&
+    state.cardsPlayed !== state.lastCheckpointAt // don't re-trigger once resolved
+  );
 }
 
 // estimates: { playerId -> guessedWrongCount }. Exact guessers get +2 from bank;
@@ -140,7 +145,10 @@ export function resolveCheckpoint(state, estimates) {
     players = state.players.map((p) =>
       dist(p) === best ? { ...p, diamonds: p.diamonds + 1 } : p);
   }
-  return { ...state, players, phase: 'placing', checkpointEstimates: {} };
+  return {
+    ...state, players, phase: 'placing', checkpointEstimates: {},
+    lastCheckpointAt: state.cardsPlayed,
+  };
 }
 
 export function isGameOver(state) {

@@ -143,3 +143,19 @@ test('isGameOver + winners', () => {
   assert.equal(isGameOver(g), true);
   assert.deepEqual(winners(g).map((p) => p.id), ['p1']);
 });
+
+test('checkpoint does not re-trigger after being resolved', () => {
+  const base = {
+    variant: 'cardinal',
+    players: [{ id: 'p1', diamonds: 5 }, { id: 'p2', diamonds: 5 }],
+    placements: [{ refId: null, isCorrect: true }, { refId: 1, isCorrect: false }],
+    cardsPlayed: 15,
+    checkpointEvery: 15,
+    lastCheckpointAt: 0,
+  };
+  assert.equal(needsCheckpoint(base), true);           // 15th card -> checkpoint due
+  const after = resolveCheckpoint(base, { p1: 1, p2: 0 });
+  assert.equal(after.lastCheckpointAt, 15);
+  assert.equal(needsCheckpoint(after), false);         // resolved -> no re-trigger at 15
+  assert.equal(needsCheckpoint({ ...after, cardsPlayed: 30 }), true); // next one at 30
+});
