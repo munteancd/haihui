@@ -1,6 +1,6 @@
 import { buildDeck, draw } from './deck.js';
-import { isPlacementCorrect, neighborCell } from './rules-cardinal.js';
-import { isInsertCorrect } from './rules-population.js';
+import { isPlacementCorrect, neighborCell, countWrong } from './rules-cardinal.js';
+import { isInsertCorrect, countWrongPopulation } from './rules-population.js';
 
 const START_DIAMONDS = 5;
 const CHECKPOINT_EVERY = 15;
@@ -111,4 +111,43 @@ export function passChallenge(state) {
     return closeWindow(state);
   }
   return { ...state, currentPlayerIndex: nextEligible };
+}
+
+function boardWrongCount(state) {
+  return state.variant === 'cardinal'
+    ? countWrong(state.placements)
+    : countWrongPopulation(state.placements.slice(1));
+}
+
+export function needsCheckpoint(state) {
+  return state.cardsPlayed > 0 && state.cardsPlayed % state.checkpointEvery === 0;
+}
+
+// estimates: { playerId -> guessedWrongCount }. Exact guessers get +2 from bank;
+// if none exact, the closest (by absolute distance) get +1 each.
+export function resolveCheckpoint(state, estimates) {
+  const truth = boardWrongCount(state);
+  const exact = state.players.filter((p) => estimates[p.id] === truth);
+
+  let players;
+  if (exact.length > 0) {
+    const winnerIds = new Set(exact.map((p) => p.id));
+    players = state.players.map((p) =>
+      winnerIds.has(p.id) ? { ...p, diamonds: p.diamonds + 2 } : p);
+  } else {
+    const dist = (p) => Math.abs(estimates[p.id] - truth);
+    const best = Math.min(...state.players.map(dist));
+    players = state.players.map((p) =>
+      dist(p) === best ? { ...p, diamonds: p.diamonds + 1 } : p);
+  }
+  return { ...state, players, phase: 'placing', checkpointEstimates: {} };
+}
+
+export function isGameOver(state) {
+  return state.cardsPlayed >= state.numTurns;
+}
+
+export function winners(state) {
+  const max = Math.max(...state.players.map((p) => p.diamonds));
+  return state.players.filter((p) => p.diamonds === max);
 }

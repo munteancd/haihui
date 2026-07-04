@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, placeCard, challenge, passChallenge } from '../src/game-state.js';
+import { createGame, placeCard, challenge, passChallenge,
+  needsCheckpoint, resolveCheckpoint, isGameOver, winners } from '../src/game-state.js';
 
 const cities = [
   { id: 1, name: 'A', lat: 45, lon: 25, pop: 100 },
@@ -98,4 +99,47 @@ test('passChallenge moves the right to challenge to the next player, then closes
   // nobody challenged: no diamonds moved
   assert.ok(g.players.every((p) => p.diamonds === 5));
   assert.equal(g.currentPlayerIndex, 1); // p2 now places next
+});
+
+test('needsCheckpoint is true after every 15th card', () => {
+  const base = createGame({ variant: 'cardinal', numTurns: 40, seed: 5,
+    players: [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }], cities });
+  assert.equal(needsCheckpoint({ ...base, cardsPlayed: 15 }), true);
+  assert.equal(needsCheckpoint({ ...base, cardsPlayed: 16 }), false);
+  assert.equal(needsCheckpoint({ ...base, cardsPlayed: 30 }), true);
+});
+
+test('resolveCheckpoint: exact guessers get +2 from the bank', () => {
+  const g = {
+    variant: 'cardinal',
+    players: [{ id: 'p1', diamonds: 5 }, { id: 'p2', diamonds: 5 }, { id: 'p3', diamonds: 5 }],
+    placements: [
+      { refId: null, isCorrect: true },
+      { refId: 1, isCorrect: false }, // 1 wrong on the board
+    ],
+  };
+  const estimates = { p1: 1, p2: 1, p3: 0 };
+  const out = resolveCheckpoint(g, estimates);
+  assert.equal(out.players.find((p) => p.id === 'p1').diamonds, 7);
+  assert.equal(out.players.find((p) => p.id === 'p2').diamonds, 7);
+  assert.equal(out.players.find((p) => p.id === 'p3').diamonds, 5);
+});
+
+test('resolveCheckpoint: nobody exact => closest get +1', () => {
+  const g = {
+    variant: 'cardinal',
+    players: [{ id: 'p1', diamonds: 5 }, { id: 'p2', diamonds: 5 }],
+    placements: [{ refId: null, isCorrect: true }, { refId: 1, isCorrect: false },
+      { refId: 1, isCorrect: false }], // 2 wrong
+  };
+  const out = resolveCheckpoint(g, { p1: 1, p2: 4 }); // both off by 2 wait: |1-2|=1, |4-2|=2 => p1 closest
+  assert.equal(out.players.find((p) => p.id === 'p1').diamonds, 6);
+  assert.equal(out.players.find((p) => p.id === 'p2').diamonds, 5);
+});
+
+test('isGameOver + winners', () => {
+  const g = { numTurns: 4, cardsPlayed: 4,
+    players: [{ id: 'p1', diamonds: 7 }, { id: 'p2', diamonds: 5 }] };
+  assert.equal(isGameOver(g), true);
+  assert.deepEqual(winners(g).map((p) => p.id), ['p1']);
 });
