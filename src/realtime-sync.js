@@ -22,9 +22,36 @@ export async function joinRoom(code, name) {
   if (error) throw error;
   const { count } = await supabase.from('players')
     .select('*', { count: 'exact', head: true }).eq('room_id', room.id);
-  const { data: player } = await supabase.from('players')
+  const { data: player, error: perr } = await supabase.from('players')
     .insert({ room_id: room.id, name, seat_order: count ?? 0 }).select().single();
+  if (perr) throw perr;
   return { room, player };
+}
+
+export async function listPlayers(roomId) {
+  const { data, error } = await supabase.from('players')
+    .select().eq('room_id', roomId).order('seat_order', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+export async function getRoom(roomId) {
+  const { data, error } = await supabase.from('rooms').select().eq('id', roomId).single();
+  if (error) throw error;
+  return data;
+}
+
+// Host starts the game: store the initial shared state and flip status to 'playing'.
+export async function startGame(roomId, state) {
+  const { error } = await supabase.from('rooms')
+    .update({ state, status: 'playing' }).eq('id', roomId);
+  if (error) throw error;
+}
+
+// Persist the whole game state after any action; all clients re-render from it.
+export async function saveState(roomId, state) {
+  const { error } = await supabase.from('rooms').update({ state }).eq('id', roomId);
+  if (error) throw error;
 }
 
 export function subscribeRoom(roomId, onChange) {
@@ -33,7 +60,5 @@ export function subscribeRoom(roomId, onChange) {
       { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` }, onChange)
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, onChange)
-    .on('postgres_changes',
-      { event: '*', schema: 'public', table: 'moves', filter: `room_id=eq.${roomId}` }, onChange)
     .subscribe();
 }

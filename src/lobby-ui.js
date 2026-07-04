@@ -1,7 +1,7 @@
-import { createRoom, joinRoom, subscribeRoom } from './realtime-sync.js';
+import { createRoom, joinRoom } from './realtime-sync.js';
 
-// Renders create/join screen into `root`. Calls onStart({ room, player }) when the game begins.
-export function renderLobby(root, onStart) {
+// Create/join screen. Calls onEnter({ room, me, isHost }) once this device is in a room.
+export function renderLobby(root, onEnter) {
   root.innerHTML = `
     <h1>Haihui</h1>
     <section>
@@ -24,10 +24,7 @@ export function renderLobby(root, onStart) {
     </section>
     <pre id="lobby-state"></pre>`;
 
-  const showError = (e) => {
-    const box = root.querySelector('#lobby-state');
-    box.textContent = `Eroare: ${e?.message || e}`;
-  };
+  const showError = (e) => { root.querySelector('#lobby-state').textContent = `Eroare: ${e?.message || e}`; };
 
   root.querySelector('#create').onclick = async () => {
     try {
@@ -36,10 +33,8 @@ export function renderLobby(root, onStart) {
       const name = root.querySelector('#host-name').value || 'Gazdă';
       const room = await createRoom({ variant, numTurns });
       const { player } = await joinRoom(room.code, name);
-      watch(root, room, player, onStart);
-    } catch (e) {
-      showError(e);
-    }
+      onEnter({ room, me: player, isHost: true });
+    } catch (e) { showError(e); }
   };
 
   root.querySelector('#join').onclick = async () => {
@@ -47,20 +42,27 @@ export function renderLobby(root, onStart) {
       const code = root.querySelector('#code').value;
       const name = root.querySelector('#join-name').value || 'Jucător';
       const { room, player } = await joinRoom(code, name);
-      watch(root, room, player, onStart);
-    } catch (e) {
-      showError(e);
-    }
+      onEnter({ room, me: player, isHost: player.seat_order === 0 });
+    } catch (e) { showError(e); }
   };
 }
 
-function watch(root, room, player, onStart) {
-  const box = root.querySelector('#lobby-state');
-  box.textContent = `Camera ${room.code} — aștept jucători…`;
-  subscribeRoom(room.id, async () => {
-    // when host starts, room.status flips to 'playing' (host presses a Start button — future)
-    box.textContent = `Camera ${room.code} — conectat ca ${player.name}`;
-  });
-  // For v1, expose the room so the board task can pick it up.
-  onStart({ room, player });
+// Waiting room: shows the code + live player list. Host sees a Start button.
+export function renderWaiting(root, { room, me, players, isHost, onStart }) {
+  root.innerHTML = `
+    <h1>Cameră ${room.code}</h1>
+    <p>Variantă: <b>${room.variant === 'cardinal' ? 'Puncte cardinale' : 'Populație'}</b> · ${room.num_turns} ture</p>
+    <p>Tu ești <b>${me.name}</b>.</p>
+    <h3>Jucători</h3>
+    <ul>${players.map((p) => `<li>${p.name}${p.seat_order === 0 ? ' (gazdă)' : ''}</li>`).join('')}</ul>
+    <div id="wait-controls"></div>`;
+  const c = root.querySelector('#wait-controls');
+  if (isHost) {
+    const canStart = players.length >= 2;
+    c.innerHTML = `<button id="start" ${canStart ? '' : 'disabled'}>Start joc</button>
+      ${canStart ? '' : '<p>Așteaptă cel puțin un jucător…</p>'}`;
+    if (canStart) root.querySelector('#start').onclick = onStart;
+  } else {
+    c.innerHTML = `<p>Așteaptă ca gazda să pornească jocul…</p>`;
+  }
 }
