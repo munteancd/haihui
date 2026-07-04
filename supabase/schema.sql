@@ -5,6 +5,7 @@ create table rooms (
   num_turns int not null,
   deck_seed bigint not null,
   status text not null default 'lobby' check (status in ('lobby','playing','ended')),
+  state jsonb,                  -- full shared game state; all clients render from this
   created_at timestamptz not null default now()
 );
 
