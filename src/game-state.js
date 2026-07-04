@@ -70,3 +70,45 @@ export function placeCard(state, move) {
     currentPlayerIndex: (placerIndex + 1) % state.players.length,
   };
 }
+
+function moveDiamond(players, fromIndex, toIndex) {
+  return players.map((p, i) => {
+    if (i === fromIndex) return { ...p, diamonds: p.diamonds - 1 };
+    if (i === toIndex) return { ...p, diamonds: p.diamonds + 1 };
+    return p;
+  });
+}
+
+// After a challenge resolves (or is fully passed), the placer's neighbor takes the
+// next turn and the challenge window closes.
+function closeWindow(state, extra = {}) {
+  const nextPlacer = (state.lastMove.placerIndex + 1) % state.players.length;
+  return {
+    ...state, phase: 'placing', lastMove: null, currentPlayerIndex: nextPlacer, ...extra,
+  };
+}
+
+// The current eligible player challenges the last placement.
+export function challenge(state) {
+  const challengerIndex = state.currentPlayerIndex;
+  const placerIndex = state.lastMove.placerIndex;
+  const placement = state.placements[state.lastMove.placementIndex];
+
+  // correct contra (placement was wrong): challenger takes from placer
+  // wrong contra (placement was right): challenger gives to placer
+  const players = placement.isCorrect
+    ? moveDiamond(state.players, challengerIndex, placerIndex)
+    : moveDiamond(state.players, placerIndex, challengerIndex);
+
+  return closeWindow({ ...state, players });
+}
+
+// The current eligible player declines. The right passes to the next player (not the
+// placer). When it returns to the placer, the window closes with nobody challenging.
+export function passChallenge(state) {
+  const nextEligible = (state.currentPlayerIndex + 1) % state.players.length;
+  if (nextEligible === state.lastMove.placerIndex) {
+    return closeWindow(state);
+  }
+  return { ...state, currentPlayerIndex: nextEligible };
+}

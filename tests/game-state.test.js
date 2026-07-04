@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, placeCard } from '../src/game-state.js';
+import { createGame, placeCard, challenge, passChallenge } from '../src/game-state.js';
 
 const cities = [
   { id: 1, name: 'A', lat: 45, lon: 25, pop: 100 },
@@ -51,4 +51,51 @@ test('placeCard (population) inserts into the line at the chosen index', () => {
   g = placeCard(g, { index: 0 });
   assert.equal(g.line[0].id, drawn.id);
   assert.equal(g.line.length, 2);
+});
+
+// Force a known-wrong placement so we can test challenge outcomes deterministically.
+function wrongPlacement() {
+  let g = createGame({ variant: 'cardinal', numTurns: 20, seed: 5,
+    players: [{ id: 'p1', name: 'Cristi' }, { id: 'p2', name: 'Lore' }], cities });
+  const anchor = g.placements[0].city;
+  const drawn = g.deck.cards[g.deck.pos];
+  // pick a direction guaranteed wrong: if drawn is north, place it South, else North
+  const dir = drawn.lat > anchor.lat ? 'S' : 'N';
+  g = placeCard(g, { refId: anchor.id, dir });
+  return g; // placer = p1, challenge window open, currentPlayer = p2 (to the right)
+}
+
+test('correct contra: challenger takes a diamond from the placer', () => {
+  let g = wrongPlacement();
+  g = challenge(g); // p2 challenges a wrong placement
+  const p1 = g.players.find((p) => p.id === 'p1');
+  const p2 = g.players.find((p) => p.id === 'p2');
+  assert.equal(p1.diamonds, 4);
+  assert.equal(p2.diamonds, 6);
+  assert.equal(g.phase, 'placing');
+  assert.equal(g.lastMove, null);
+});
+
+test('wrong contra: challenger gives a diamond to the placer', () => {
+  // build a known-correct placement, then challenge it
+  let g = createGame({ variant: 'cardinal', numTurns: 20, seed: 5,
+    players: [{ id: 'p1', name: 'Cristi' }, { id: 'p2', name: 'Lore' }], cities });
+  const anchor = g.placements[0].city;
+  const drawn = g.deck.cards[g.deck.pos];
+  const dir = drawn.lat > anchor.lat ? 'N' : 'S'; // guaranteed correct
+  g = placeCard(g, { refId: anchor.id, dir });
+  g = challenge(g);
+  const p1 = g.players.find((p) => p.id === 'p1');
+  const p2 = g.players.find((p) => p.id === 'p2');
+  assert.equal(p1.diamonds, 6);
+  assert.equal(p2.diamonds, 4);
+});
+
+test('passChallenge moves the right to challenge to the next player, then closes', () => {
+  let g = wrongPlacement(); // placer p1, currentPlayer p2
+  g = passChallenge(g);     // p2 passes; only 2 players so window closes back to placer+1
+  assert.equal(g.phase, 'placing');
+  // nobody challenged: no diamonds moved
+  assert.ok(g.players.every((p) => p.diamonds === 5));
+  assert.equal(g.currentPlayerIndex, 1); // p2 now places next
 });
