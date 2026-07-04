@@ -1,0 +1,7 @@
+:root { --bg:#0f1720; --fg:#e8eef5; --accent:#4fd1c5; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font-family:system-ui,sans-serif; }
+#app { padding: 16px; }
+footer { padding:8px 16px; font-size:12px; opacity:.6; }
+button { font-size:16px; padding:10px 14px; border-radius:8px; border:0;
+  background:var(--accent); color:#04201c; }
