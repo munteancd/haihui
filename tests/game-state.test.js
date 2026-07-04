@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame } from '../src/game-state.js';
+import { createGame, placeCard } from '../src/game-state.js';
 
 const cities = [
   { id: 1, name: 'A', lat: 45, lon: 25, pop: 100 },
@@ -25,4 +25,30 @@ test('createGame seats players, deals 5 diamonds, plays anchor card', () => {
   assert.equal(g.cardsPlayed, 1);
   assert.equal(g.phase, 'placing');
   assert.equal(g.currentPlayerIndex, 0);           // player after the one who laid the anchor
+});
+
+test('placeCard (cardinal) records placement, advances turn, opens challenge window', () => {
+  let g = createGame({ variant: 'cardinal', numTurns: 20, seed: 5,
+    players: [{ id: 'p1', name: 'Cristi' }, { id: 'p2', name: 'Lore' }], cities });
+  const anchor = g.placements[0].city;
+  const drawn = g.deck.cards[g.deck.pos];
+  g = placeCard(g, { refId: anchor.id, dir: 'N' });
+
+  const last = g.placements[g.placements.length - 1];
+  assert.equal(last.city.id, drawn.id);
+  assert.equal(last.dir, 'N');
+  assert.equal(typeof last.isCorrect, 'boolean');
+  assert.equal(g.cardsPlayed, 2);
+  assert.equal(g.phase, 'challenge_window');
+  assert.equal(g.lastMove.placerIndex, 0);
+  assert.equal(g.currentPlayerIndex, 1); // next player up
+});
+
+test('placeCard (population) inserts into the line at the chosen index', () => {
+  let g = createGame({ variant: 'population', numTurns: 20, seed: 5,
+    players: [{ id: 'p1', name: 'Cristi' }, { id: 'p2', name: 'Lore' }], cities });
+  const drawn = g.deck.cards[g.deck.pos];
+  g = placeCard(g, { index: 0 });
+  assert.equal(g.line[0].id, drawn.id);
+  assert.equal(g.line.length, 2);
 });
