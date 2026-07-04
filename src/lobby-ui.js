@@ -24,20 +24,33 @@ export function renderLobby(root, onStart) {
     </section>
     <pre id="lobby-state"></pre>`;
 
+  const showError = (e) => {
+    const box = root.querySelector('#lobby-state');
+    box.textContent = `Eroare: ${e?.message || e}`;
+  };
+
   root.querySelector('#create').onclick = async () => {
-    const variant = root.querySelector('#variant').value;
-    const numTurns = Number(root.querySelector('#turns').value);
-    const name = root.querySelector('#host-name').value || 'Gazdă';
-    const room = await createRoom({ variant, numTurns });
-    const { player } = await joinRoom(room.code, name);
-    watch(root, room, player, onStart);
+    try {
+      const variant = root.querySelector('#variant').value;
+      const numTurns = Number(root.querySelector('#turns').value);
+      const name = root.querySelector('#host-name').value || 'Gazdă';
+      const room = await createRoom({ variant, numTurns });
+      const { player } = await joinRoom(room.code, name);
+      watch(root, room, player, onStart);
+    } catch (e) {
+      showError(e);
+    }
   };
 
   root.querySelector('#join').onclick = async () => {
-    const code = root.querySelector('#code').value;
-    const name = root.querySelector('#join-name').value || 'Jucător';
-    const { room, player } = await joinRoom(code, name);
-    watch(root, room, player, onStart);
+    try {
+      const code = root.querySelector('#code').value;
+      const name = root.querySelector('#join-name').value || 'Jucător';
+      const { room, player } = await joinRoom(code, name);
+      watch(root, room, player, onStart);
+    } catch (e) {
+      showError(e);
+    }
   };
 }
 
