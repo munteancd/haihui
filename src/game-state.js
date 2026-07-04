@@ -1,5 +1,5 @@
 import { buildDeck, draw } from './deck.js';
-import { isPlacementCorrect, neighborCell, countWrong } from './rules-cardinal.js';
+import { isArmInsertCorrect, countWrong } from './rules-cardinal.js';
 import { isInsertCorrect, countWrongPopulation } from './rules-population.js';
 
 const START_DIAMONDS = 5;
@@ -14,8 +14,8 @@ export function createGame({ variant, numTurns, seed, players, cities }) {
 
   const anchorPlacement =
     variant === 'cardinal'
-      ? { playerId: null, city: anchor, refId: null, dir: null, cell: { x: 0, y: 0 }, isCorrect: true }
-      : { playerId: null, city: anchor, index: 0, isCorrect: true };
+      ? { playerId: null, city: anchor, dir: null, index: null, isCorrect: true, revealed: true }
+      : { playerId: null, city: anchor, index: 0, isCorrect: true, revealed: true };
 
   return {
     variant,
@@ -25,7 +25,9 @@ export function createGame({ variant, numTurns, seed, players, cities }) {
     currentPlayerIndex: 0,
     deck: next,
     placements: [anchorPlacement],
-    line: variant === 'population' ? [anchor] : undefined, // ordered cities for population
+    line: variant === 'population' ? [anchor] : undefined,   // ordered cities for population
+    arms: variant === 'cardinal' ? { N: [], S: [], E: [], V: [] } : undefined, // four arms of the +
+    removed: [],               // cards knocked off the board by a successful contra
     lastMove: null,            // { placementIndex, placerIndex } open to challenge
     cardsPlayed: 1,
     phase: 'placing',          // 'placing' | 'challenge_window' | 'checkpoint' | 'ended'
@@ -35,8 +37,9 @@ export function createGame({ variant, numTurns, seed, players, cities }) {
   };
 }
 
-// The current player lays the drawn card. `move` is { refId, dir } for cardinal
-// or { index } for population. Correctness is computed but stays hidden in the UI.
+// The current player lays the drawn card. `move` is { dir, index } for cardinal
+// (which arm, and where along it) or { index } for population. Correctness is computed
+// but stays hidden until the card is revealed by a contra or checkpoint.
 export function placeCard(state, move) {
   const { card, next } = draw(state.deck);
   const placerIndex = state.currentPlayerIndex;
@@ -44,17 +47,19 @@ export function placeCard(state, move) {
 
   let placement;
   let line = state.line;
+  let arms = state.arms;
 
   if (state.variant === 'cardinal') {
-    const ref = state.placements.find((p) => p.city.id === move.refId);
-    const isCorrect = isPlacementCorrect(card, ref.city, move.dir);
-    placement = {
-      playerId: placerId, city: card, refId: move.refId, dir: move.dir,
-      cell: neighborCell(ref.cell, move.dir), isCorrect,
-    };
+    const anchorCity = state.placements[0].city;
+    const arm = state.arms[move.dir];
+    const isCorrect = isArmInsertCorrect(arm, anchorCity, move.dir, move.index, card);
+    const newArm = arm.slice();
+    newArm.splice(move.index, 0, card);
+    arms = { ...state.arms, [move.dir]: newArm };
+    placement = { playerId: placerId, city: card, dir: move.dir, index: move.index, isCorrect, revealed: false };
   } else {
     const isCorrect = isInsertCorrect(state.line, move.index, card);
-    placement = { playerId: placerId, city: card, index: move.index, isCorrect };
+    placement = { playerId: placerId, city: card, index: move.index, isCorrect, revealed: false };
     line = state.line.slice();
     line.splice(move.index, 0, card);
   }
@@ -64,6 +69,7 @@ export function placeCard(state, move) {
     deck: next,
     placements: [...state.placements, placement],
     line,
+    arms,
     cardsPlayed: state.cardsPlayed + 1,
     phase: 'challenge_window',
     lastMove: { placementIndex: state.placements.length, placerIndex },
@@ -89,19 +95,40 @@ function closeWindow(state, extra = {}) {
   };
 }
 
-// The current eligible player challenges the last placement.
+// The current eligible player challenges the last placement. Either way the card is
+// revealed (its data is turned face-up). A correct contra (the placement was wrong)
+// also knocks that card off the board into the removed pile.
 export function challenge(state) {
   const challengerIndex = state.currentPlayerIndex;
   const placerIndex = state.lastMove.placerIndex;
-  const placement = state.placements[state.lastMove.placementIndex];
+  const idx = state.lastMove.placementIndex;
+  const placement = state.placements[idx];
+  const contraCorrect = !placement.isCorrect;
 
-  // correct contra (placement was wrong): challenger takes from placer
-  // wrong contra (placement was right): challenger gives to placer
-  const players = placement.isCorrect
-    ? moveDiamond(state.players, challengerIndex, placerIndex)
-    : moveDiamond(state.players, placerIndex, challengerIndex);
+  // correct contra: challenger takes from placer; wrong contra: challenger gives to placer
+  const players = contraCorrect
+    ? moveDiamond(state.players, placerIndex, challengerIndex)
+    : moveDiamond(state.players, challengerIndex, placerIndex);
 
-  return closeWindow({ ...state, players });
+  const placements = state.placements.map((p, i) =>
+    i === idx ? { ...p, revealed: true, removed: contraCorrect } : p);
+
+  let line = state.line;
+  let arms = state.arms;
+  let removed = state.removed;
+  if (contraCorrect) {
+    removed = [...state.removed, placement.city];
+    if (state.variant === 'cardinal') {
+      const arm = state.arms[placement.dir].slice();
+      arm.splice(placement.index, 1);
+      arms = { ...state.arms, [placement.dir]: arm };
+    } else {
+      line = state.line.slice();
+      line.splice(placement.index, 1);
+    }
+  }
+
+  return closeWindow({ ...state, players, placements, line, arms, removed });
 }
 
 // The current eligible player declines. The right passes to the next player (not the

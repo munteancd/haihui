@@ -6,6 +6,7 @@ export function isInsertCorrect(line, index, city) {
   return city.pop >= left && city.pop <= right;
 }
 
+// Cards knocked off the board by a successful contra (removed) no longer count.
 export function countWrongPopulation(placements) {
-  return placements.filter((p) => !p.isCorrect).length;
+  return placements.filter((p) => !p.removed && !p.isCorrect).length;
 }
