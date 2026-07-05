@@ -57,9 +57,20 @@ async function startSolo({ variant, difficulty, numBots, numTurns }) {
 
   let current = state;
   let timer = null;
-  const board = renderBoard(app, { state, myId: 'you', isHost: true, onAction: apply });
+  const board = renderBoard(app, { state, myId: 'you', isHost: true, onAction: onLocalAction });
 
-  function apply(s) {
+  // The human's own move is already rendered (and animated) by the board itself via its
+  // internal draw. We must NOT re-render here — a second synchronous render would rebuild
+  // the board and wipe the just-added place/flip animation before it ever paints. We only
+  // track the new state and let the bots respond.
+  function onLocalAction(s) {
+    current = s;
+    scheduleBot();
+  }
+
+  // A bot produced a new state: push it into the board (this renders and animates the bot's
+  // move) and continue.
+  function driveBot(s) {
     current = s;
     board.setState(s);
     scheduleBot();
@@ -71,9 +82,9 @@ async function startSolo({ variant, difficulty, numBots, numTurns }) {
     const actor = current.players[current.currentPlayerIndex];
     if (!isBot(actor)) return;
     if (current.phase === 'placing' && !needsCheckpoint(current)) {
-      timer = setTimeout(() => apply(botPlace(current)), 900);
+      timer = setTimeout(() => driveBot(botPlace(current)), 900);
     } else if (current.phase === 'challenge_window') {
-      timer = setTimeout(() => apply(botDecideChallenge(current)), 900);
+      timer = setTimeout(() => driveBot(botDecideChallenge(current)), 900);
     }
     // contra_result and checkpoint stay human-paced (the human presses Continuă / scores).
   }
