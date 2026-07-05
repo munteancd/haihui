@@ -12,7 +12,20 @@
   <footer>City data © GeoNames (CC BY 4.0)</footer>
   <script type="module" src="src/main.js"></script>
   <script>
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+    if ('serviceWorker' in navigator) {
+      // When a new service worker takes control, reload once so the page always ends up on
+      // the latest code. Guard against the first-ever install (no previous controller) and
+      // against reload loops.
+      let reloading = false;
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (reloading) return;
+          reloading = true;
+          location.reload();
+        });
+      }
+      navigator.serviceWorker.register('sw.js');
+    }
   </script>
 </body>
 </html>

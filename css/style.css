@@ -30,9 +30,8 @@ section { margin-bottom:18px; }
 .card-face, .card-back { position:absolute; inset:0; backface-visibility:hidden;
   -webkit-backface-visibility:hidden; display:flex; align-items:center; justify-content:center;
   text-align:center; padding:4px; border-radius:8px; font-size:13px; line-height:1.15; }
-.card-face { background:var(--card); border:1px solid var(--line); flex-direction:column; gap:1px; }
-.card-face .flag { font-size:15px; line-height:1; }
-.card-face .cname { font-size:12px; line-height:1.1; }
+.card-face { background:var(--card); border:1px solid var(--line); }
+.card-face .cname { font-size:12px; line-height:1.15; }
 .card-back { background:#0b3b36; border:1px solid var(--accent); color:var(--accent);
   transform:rotateY(180deg); font-variant-numeric:tabular-nums; }
 .card.anchor-card .card-face { background:#3b2f0b; border-color:#b58900; font-weight:600; }

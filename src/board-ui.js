@@ -29,12 +29,8 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
   let animPlaceId = null; // card that has just been placed (slide/scale in)
   let animatedPlaceKey = null; // lastMove index already animated, so we don't repeat it
 
-  // A country-code (e.g. "RO") to its flag emoji.
-  const flagOf = (cc) => cc
-    ? cc.toUpperCase().replace(/./g, (ch) => String.fromCodePoint(127397 + ch.charCodeAt(0)))
-    : '';
-
-  // A card: name (+ flag) on the face, data on the back. `revealed` flips it to show data.
+  // A card: name on the face, data on the back. `revealed` flips it to show the data. We
+  // deliberately do NOT show the country/flag — it would give away roughly where the city is.
   function cardEl(city, { revealed = false, faded = false, anchor = false, draggable = false, id = '' } = {}) {
     const data = current.variant === 'cardinal'
       ? `${city.lat.toFixed(1)}, ${city.lon.toFixed(1)}`
@@ -46,9 +42,8 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     if (draggable) cls.push('draggable');
     if (city.id === animFlipId) cls.push('flip-anim');
     if (city.id === animPlaceId) cls.push('place-anim');
-    const flag = flagOf(city.cc);
     return `<div class="${cls.join(' ')}"${id ? ` id="${id}"` : ''}><div class="card-inner">
-      <div class="card-face">${flag ? `<span class="flag">${flag}</span>` : ''}<span class="cname">${city.name}</span></div>
+      <div class="card-face"><span class="cname">${city.name}</span></div>
       <div class="card-back">${data}</div></div></div>`;
   }
 
