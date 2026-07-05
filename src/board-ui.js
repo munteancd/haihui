@@ -24,7 +24,17 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
   const placementOf = (cityId) => current.placements.find((p) => p.city.id === cityId);
   const drawnCard = () => current.deck.cards[current.deck.pos];
 
-  // A card: name on the face, data on the back. `revealed` flips it to show the data.
+  // Card ids that should play a one-shot animation on the next render.
+  let animFlipId = null;  // card being revealed by a contra (flip)
+  let animPlaceId = null; // card that has just been placed (slide/scale in)
+  let animatedPlaceKey = null; // lastMove index already animated, so we don't repeat it
+
+  // A country-code (e.g. "RO") to its flag emoji.
+  const flagOf = (cc) => cc
+    ? cc.toUpperCase().replace(/./g, (ch) => String.fromCodePoint(127397 + ch.charCodeAt(0)))
+    : '';
+
+  // A card: name (+ flag) on the face, data on the back. `revealed` flips it to show data.
   function cardEl(city, { revealed = false, faded = false, anchor = false, draggable = false, id = '' } = {}) {
     const data = current.variant === 'cardinal'
       ? `${city.lat.toFixed(1)}, ${city.lon.toFixed(1)}`
@@ -34,8 +44,11 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     if (faded) cls.push('faded');
     if (anchor) cls.push('anchor-card');
     if (draggable) cls.push('draggable');
+    if (city.id === animFlipId) cls.push('flip-anim');
+    if (city.id === animPlaceId) cls.push('place-anim');
+    const flag = flagOf(city.cc);
     return `<div class="${cls.join(' ')}"${id ? ` id="${id}"` : ''}><div class="card-inner">
-      <div class="card-face">${city.name}</div>
+      <div class="card-face">${flag ? `<span class="flag">${flag}</span>` : ''}<span class="cname">${city.name}</span></div>
       <div class="card-back">${data}</div></div></div>`;
   }
 
@@ -47,9 +60,35 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
   function header() {
     const cur = current.players[current.currentPlayerIndex];
     const you = current.players.find((p) => p.id === myId);
+    const scores = current.players.map((p) =>
+      `<span class="pscore" data-p="${p.id}">${p.name}: <span class="dcount">${'💎'.repeat(Math.max(0, p.diamonds))} ${p.diamonds}</span></span>`)
+      .join(' · ');
     return `
-      <p class="diamonds">${current.players.map((p) => `${p.name}: ${'💎'.repeat(Math.max(0, p.diamonds))} ${p.diamonds}`).join(' · ')}</p>
+      <p class="diamonds">${scores}</p>
       <p>La rând: <b>${cur.name}</b>${you ? ` — tu ești <b>${you.name}</b>` : ''}</p>`;
+  }
+
+  // Animate a diamond flying from the loser's score to the winner's, then pulse the winner.
+  function flyDiamond(loserId, winnerId) {
+    const from = root.querySelector(`.pscore[data-p="${loserId}"]`);
+    const to = root.querySelector(`.pscore[data-p="${winnerId}"]`);
+    if (!from || !to) return;
+    const a = from.getBoundingClientRect();
+    const b = to.getBoundingClientRect();
+    const gem = document.createElement('div');
+    gem.className = 'fly-diamond';
+    gem.textContent = '💎';
+    gem.style.left = `${a.left + a.width / 2}px`;
+    gem.style.top = `${a.top}px`;
+    document.body.appendChild(gem);
+    requestAnimationFrame(() => {
+      gem.style.transform = `translate(${b.left + b.width / 2 - (a.left + a.width / 2)}px, ${b.top - a.top}px)`;
+      gem.style.opacity = '0.2';
+    });
+    setTimeout(() => {
+      gem.remove();
+      to.querySelector('.dcount')?.classList.add('pulse');
+    }, 650);
   }
 
   // The card currently drawn from the deck, shown to everyone during the placing phase.
@@ -151,6 +190,8 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
   }
 
   function draw() {
+    animFlipId = null;
+    animPlaceId = null;
     if (isGameOver(current)) {
       const w = winners(current).map((p) => p.name).join(', ');
       root.innerHTML = `${header()}<h2>Gata! Câștigă: ${w} 🏆</h2><div id="board">${boardHtml(true)}</div>`;
@@ -163,6 +204,12 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     if (needsCheckpoint(current) && current.phase === 'placing') {
       renderCheckpoint();
       return;
+    }
+    // Animate a freshly placed card sliding into its slot (once per placement).
+    if (current.phase === 'challenge_window' && current.lastMove
+        && animatedPlaceKey !== current.lastMove.placementIndex) {
+      animPlaceId = current.placements[current.lastMove.placementIndex].city.id;
+      animatedPlaceKey = current.lastMove.placementIndex;
     }
     root.innerHTML = `${header()}${drawBanner()}<div id="board">${boardHtml()}</div><div id="controls"></div>`;
 
@@ -187,9 +234,15 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     const msg = r.contraCorrect
       ? `✅ Contra <b>corectă</b>! „${r.cardName}" era greșit pusă — <b>${r.challengerName}</b> ia un 💎 de la <b>${r.placerName}</b>, iar cartea iese de pe tablă.`
       : `❌ Contra <b>greșită</b>! „${r.cardName}" era bine pusă — <b>${r.challengerName}</b> dă un 💎 lui <b>${r.placerName}</b>.`;
+    // Flip the challenged card as it is revealed.
+    animFlipId = current.placements[r.placementIndex].city.id;
     root.innerHTML = `${header()}<div id="board">${boardHtml()}</div>
       <div class="result"><p>${msg}</p><button id="cont">Continuă</button></div>`;
     root.querySelector('#cont').onclick = () => commit(continueAfterContra(current));
+    // Fly a diamond from the loser to the winner, then pulse the winner's score.
+    const winnerIdx = r.contraCorrect ? r.challengerIndex : r.placerIndex;
+    const loserIdx = r.contraCorrect ? r.placerIndex : r.challengerIndex;
+    flyDiamond(current.players[loserIdx].id, current.players[winnerIdx].id);
   }
 
   function renderChallengeControls() {

@@ -150,7 +150,7 @@ export function challenge(state) {
     ...state, players, placements, line, arms, removed,
     phase: 'contra_result',
     lastResult: {
-      placementIndex: idx, placerIndex, contraCorrect,
+      placementIndex: idx, placerIndex, challengerIndex, contraCorrect,
       cardName: placement.city.name,
       placerName: state.players[placerIndex].name,
       challengerName: state.players[challengerIndex].name,

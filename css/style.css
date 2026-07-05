@@ -1,6 +1,15 @@
 :root { --bg:#0f1720; --fg:#e8eef5; --accent:#4fd1c5; --card:#1e293b; --line:#33415a; }
 * { box-sizing: border-box; }
-body { margin:0; background:var(--bg); color:var(--fg); font-family:system-ui,sans-serif; }
+body { margin:0; color:var(--fg); font-family:system-ui,sans-serif;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #17324a 0%, rgba(23,50,74,0) 60%),
+    radial-gradient(900px 500px at 90% 110%, #14303a 0%, rgba(20,48,58,0) 55%),
+    var(--bg);
+  background-attachment: fixed; }
+/* faint dotted "map" texture */
+body::before { content:''; position:fixed; inset:0; z-index:-1; pointer-events:none; opacity:.5;
+  background-image: radial-gradient(rgba(255,255,255,.05) 1px, transparent 1px);
+  background-size: 22px 22px; }
 #app { padding: 16px; }
 footer { padding:8px 16px; font-size:12px; opacity:.6; }
 button { font-size:16px; padding:10px 14px; border-radius:8px; border:0; cursor:pointer;
@@ -21,7 +30,9 @@ section { margin-bottom:18px; }
 .card-face, .card-back { position:absolute; inset:0; backface-visibility:hidden;
   -webkit-backface-visibility:hidden; display:flex; align-items:center; justify-content:center;
   text-align:center; padding:4px; border-radius:8px; font-size:13px; line-height:1.15; }
-.card-face { background:var(--card); border:1px solid var(--line); }
+.card-face { background:var(--card); border:1px solid var(--line); flex-direction:column; gap:1px; }
+.card-face .flag { font-size:15px; line-height:1; }
+.card-face .cname { font-size:12px; line-height:1.1; }
 .card-back { background:#0b3b36; border:1px solid var(--accent); color:var(--accent);
   transform:rotateY(180deg); font-variant-numeric:tabular-nums; }
 .card.anchor-card .card-face { background:#3b2f0b; border-color:#b58900; font-weight:600; }
@@ -63,3 +74,23 @@ section { margin-bottom:18px; }
 .result { margin-top:14px; padding:12px 14px; border:1px solid var(--accent); border-radius:10px;
   background:#0b3b36; }
 .result p { margin:0 0 10px; line-height:1.4; }
+
+/* Animations. Respect users who prefer reduced motion. */
+.card.flip-anim .card-inner { animation: flipIn .5s ease both; }
+@keyframes flipIn { from { transform: rotateY(0deg); } to { transform: rotateY(180deg); } }
+
+.card.place-anim { animation: placeIn .35s ease both; }
+@keyframes placeIn {
+  from { opacity: 0; transform: scale(.5) translateY(-16px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.fly-diamond { position: fixed; z-index: 1000; font-size: 22px; pointer-events: none;
+  transform: translate(0, 0); transition: transform .6s cubic-bezier(.4,.8,.3,1), opacity .6s ease; }
+
+.dcount.pulse { display: inline-block; animation: pulse .5s ease; }
+@keyframes pulse { 0% { transform: scale(1); } 40% { transform: scale(1.5); color: var(--accent); } 100% { transform: scale(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .card.flip-anim .card-inner, .card.place-anim, .dcount.pulse, .fly-diamond { animation: none; transition: none; }
+}
