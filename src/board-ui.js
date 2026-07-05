@@ -1,4 +1,4 @@
-import { placeCard, challenge, passChallenge,
+import { placeCard, challenge, passChallenge, continueAfterContra,
          needsCheckpoint, resolveCheckpoint, isGameOver, winners } from './game-state.js';
 
 // Controlled board: renders a shared game `state` and only enables controls when it is
@@ -152,6 +152,10 @@ export function renderBoard(root, { state, myId, onAction = () => {} }) {
       root.innerHTML = `${header()}<h2>Gata! Câștigă: ${w} 🏆</h2><div id="board">${boardHtml(true)}</div>`;
       return;
     }
+    if (current.phase === 'contra_result') {
+      renderContraResult();
+      return;
+    }
     if (needsCheckpoint(current) && current.phase === 'placing') {
       renderCheckpoint();
       return;
@@ -170,6 +174,18 @@ export function renderBoard(root, { state, myId, onAction = () => {} }) {
       return;
     }
     renderChallengeControls();
+  }
+
+  // Shared result screen after a contra: the challenged card is revealed, the outcome and
+  // diamond transfer are spelled out, and anyone can press Continuă to move on.
+  function renderContraResult() {
+    const r = current.lastResult;
+    const msg = r.contraCorrect
+      ? `✅ Contra <b>corectă</b>! „${r.cardName}" era greșit pusă — <b>${r.challengerName}</b> ia un 💎 de la <b>${r.placerName}</b>, iar cartea iese de pe tablă.`
+      : `❌ Contra <b>greșită</b>! „${r.cardName}" era bine pusă — <b>${r.challengerName}</b> dă un 💎 lui <b>${r.placerName}</b>.`;
+    root.innerHTML = `${header()}<div id="board">${boardHtml()}</div>
+      <div class="result"><p>${msg}</p><button id="cont">Continuă</button></div>`;
+    root.querySelector('#cont').onclick = () => commit(continueAfterContra(current));
   }
 
   function renderChallengeControls() {

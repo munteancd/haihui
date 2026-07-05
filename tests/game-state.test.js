@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, placeCard, challenge, passChallenge,
+import { createGame, placeCard, challenge, passChallenge, continueAfterContra,
   needsCheckpoint, resolveCheckpoint, isGameOver, winners } from '../src/game-state.js';
 
 const cities = [
@@ -85,23 +85,28 @@ function wrongPlacement() {
   return g; // placer = p1, challenge window open, currentPlayer = p2 (to the right)
 }
 
-test('correct contra: challenger takes a diamond and the card is removed from the board', () => {
+test('correct contra: reveals, moves a diamond, removes the card, then continues', () => {
   let g = wrongPlacement();
   const arm = g.placements[g.placements.length - 1].dir;
   g = challenge(g); // p2 challenges a wrong placement
-  const p1 = g.players.find((p) => p.id === 'p1');
-  const p2 = g.players.find((p) => p.id === 'p2');
-  assert.equal(p1.diamonds, 4);
-  assert.equal(p2.diamonds, 6);
-  assert.equal(g.phase, 'placing');
-  assert.equal(g.lastMove, null);
+  // pauses on the result screen with the outcome and the reveal
+  assert.equal(g.phase, 'contra_result');
+  assert.equal(g.lastResult.contraCorrect, true);
+  assert.equal(g.players.find((p) => p.id === 'p1').diamonds, 4);
+  assert.equal(g.players.find((p) => p.id === 'p2').diamonds, 6);
   assert.equal(g.arms[arm].length, 0);             // card knocked off its arm
   assert.equal(g.removed.length, 1);               // and into the removed pile
   assert.equal(g.placements[g.placements.length - 1].removed, true);
   assert.equal(g.placements[g.placements.length - 1].revealed, true);
+
+  g = continueAfterContra(g);
+  assert.equal(g.phase, 'placing');
+  assert.equal(g.lastMove, null);
+  assert.equal(g.lastResult, null);
+  assert.equal(g.currentPlayerIndex, 1);           // placer(0) + 1 places next
 });
 
-test('wrong contra: challenger gives a diamond and the card stays face-up (not revealed)', () => {
+test('wrong contra: reveals + gives a diamond, card stays; after continue it flips back to its name', () => {
   // build a known-correct placement, then challenge it
   let g = createGame({ variant: 'cardinal', numTurns: 20, seed: 5,
     players: [{ id: 'p1', name: 'Cristi' }, { id: 'p2', name: 'Lore' }], cities });
@@ -110,13 +115,17 @@ test('wrong contra: challenger gives a diamond and the card stays face-up (not r
   const dir = drawn.lat > anchor.lat ? 'N' : 'S'; // guaranteed correct
   g = placeCard(g, { dir, index: 0 });
   g = challenge(g);
-  const p1 = g.players.find((p) => p.id === 'p1');
-  const p2 = g.players.find((p) => p.id === 'p2');
-  assert.equal(p1.diamonds, 6);
-  assert.equal(p2.diamonds, 4);
+  assert.equal(g.phase, 'contra_result');
+  assert.equal(g.lastResult.contraCorrect, false);
+  assert.equal(g.players.find((p) => p.id === 'p1').diamonds, 6);
+  assert.equal(g.players.find((p) => p.id === 'p2').diamonds, 4);
   assert.equal(g.arms[dir].length, 1);             // card stays on the board
   assert.equal(g.removed.length, 0);
-  assert.equal(g.placements[g.placements.length - 1].revealed, false); // stays face-up (name)
+  assert.equal(g.placements[g.placements.length - 1].revealed, true); // revealed during result
+
+  g = continueAfterContra(g);
+  assert.equal(g.placements[g.placements.length - 1].revealed, false); // flips back to its name
+  assert.equal(g.phase, 'placing');
 });
 
 test('passChallenge moves the right to challenge to the next player, then closes', () => {

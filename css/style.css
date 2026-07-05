@@ -56,3 +56,8 @@ select, input { font-size:15px; padding:6px 8px; border-radius:6px; border:1px s
 .arm-e .dz, .arm-v .dz { width:14px; height:60px; }
 .line .dz { width:16px; align-self:stretch; }
 .dz-over { background:var(--accent); border-color:var(--accent); box-shadow:0 0 8px var(--accent); }
+
+/* Contra result screen. */
+.result { margin-top:14px; padding:12px 14px; border:1px solid var(--accent); border-radius:10px;
+  background:#0b3b36; }
+.result p { margin:0 0 10px; line-height:1.4; }

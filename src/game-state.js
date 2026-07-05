@@ -110,10 +110,9 @@ export function challenge(state) {
     ? moveDiamond(state.players, placerIndex, challengerIndex)
     : moveDiamond(state.players, challengerIndex, placerIndex);
 
-  // A correct contra reveals the card (its data) as it leaves the board; a failed contra
-  // leaves the card on the board face-up (name), so it is not revealed to its data side.
+  // Reveal the challenged card so everyone can verify it on the result screen.
   const placements = state.placements.map((p, i) =>
-    i === idx ? { ...p, revealed: contraCorrect, removed: contraCorrect } : p);
+    i === idx ? { ...p, revealed: true, removed: contraCorrect } : p);
 
   let line = state.line;
   let arms = state.arms;
@@ -130,7 +129,31 @@ export function challenge(state) {
     }
   }
 
-  return closeWindow({ ...state, players, placements, line, arms, removed });
+  // Pause on a result screen (visible to everyone) instead of jumping straight to the next
+  // turn, so the diamond transfer and the reveal are actually seen.
+  return {
+    ...state, players, placements, line, arms, removed,
+    phase: 'contra_result',
+    lastResult: {
+      placementIndex: idx, placerIndex, contraCorrect,
+      cardName: placement.city.name,
+      placerName: state.players[placerIndex].name,
+      challengerName: state.players[challengerIndex].name,
+    },
+  };
+}
+
+// Leave the contra result screen. A card that stayed on the board flips back to its name;
+// the next player (to the placer's right) starts placing.
+export function continueAfterContra(state) {
+  const r = state.lastResult;
+  const nextPlacer = (r.placerIndex + 1) % state.players.length;
+  const placements = state.placements.map((p, i) =>
+    i === r.placementIndex && !p.removed ? { ...p, revealed: false } : p);
+  return {
+    ...state, placements, phase: 'placing',
+    currentPlayerIndex: nextPlacer, lastMove: null, lastResult: null,
+  };
 }
 
 // The current eligible player declines. The right passes to the next player (not the
