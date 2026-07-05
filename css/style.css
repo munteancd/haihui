@@ -10,6 +10,8 @@ label { display:inline-flex; flex-direction:column; gap:4px; margin:4px 8px 4px 
 select, input { font-size:15px; padding:6px 8px; border-radius:6px; border:1px solid var(--line);
   background:#0b1420; color:var(--fg); }
 .diamonds { font-size:14px; }
+.hint { font-size:12px; opacity:.7; margin:2px 0 6px; }
+section { margin-bottom:18px; }
 
 /* Cards: name on the face, data on the back; .revealed flips to the back. */
 .card { width:88px; height:60px; perspective:600px; flex:0 0 auto; }

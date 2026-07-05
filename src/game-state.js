@@ -5,11 +5,22 @@ import { isInsertCorrect, countWrongPopulation } from './rules-population.js';
 const START_DIAMONDS = 5;
 const CHECKPOINT_EVERY = 15;
 
+// Difficulty = how many cities are in play, kept to the most populous (best-known) ones.
+// Easier tiers use a small, famous pool; Legendar uses everything.
+export const DIFFICULTY = { usor: 200, mediu: 800, greu: 2000, legendar: Infinity };
+
+// The pool of cities a difficulty draws from: the top `poolSize` by population.
+export function pickPool(cities, poolSize) {
+  if (poolSize === Infinity || cities.length <= poolSize) return cities.slice();
+  return [...cities].sort((a, b) => b.pop - a.pop).slice(0, poolSize);
+}
+
 // Build a fresh game. The anchor (first card) is laid automatically and is always
 // "correct" since there is nothing to compare it to.
-export function createGame({ variant, numTurns, seed, players, cities }) {
-  const deckSize = Math.min(numTurns, cities.length);
-  const deckState = { cards: buildDeck(cities, deckSize, seed), pos: 0 };
+export function createGame({ variant, numTurns, seed, players, cities, difficulty = 'legendar' }) {
+  const pool = pickPool(cities, DIFFICULTY[difficulty] ?? Infinity);
+  const deckSize = Math.min(numTurns, pool.length);
+  const deckState = { cards: buildDeck(pool, deckSize, seed), pos: 0 };
   const { card: anchor, next } = draw(deckState);
 
   const anchorPlacement =
@@ -21,6 +32,7 @@ export function createGame({ variant, numTurns, seed, players, cities }) {
     variant,
     numTurns,
     seed,
+    difficulty,
     players: players.map((p) => ({ ...p, diamonds: START_DIAMONDS })),
     currentPlayerIndex: 0,
     deck: next,
@@ -78,9 +90,12 @@ export function placeCard(state, move) {
   };
 }
 
+// The winner always gains a diamond; the loser gives one only if they have any. Nobody
+// drops below zero and nobody is knocked out — when the loser is already empty, the
+// winner's diamond comes from the bank instead.
 function moveDiamond(players, fromIndex, toIndex) {
   return players.map((p, i) => {
-    if (i === fromIndex) return { ...p, diamonds: p.diamonds - 1 };
+    if (i === fromIndex) return { ...p, diamonds: Math.max(0, p.diamonds - 1) };
     if (i === toIndex) return { ...p, diamonds: p.diamonds + 1 };
     return p;
   });

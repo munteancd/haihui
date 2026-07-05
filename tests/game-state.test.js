@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, placeCard, challenge, passChallenge, continueAfterContra,
-  needsCheckpoint, resolveCheckpoint, isGameOver, winners } from '../src/game-state.js';
+  needsCheckpoint, resolveCheckpoint, isGameOver, winners, pickPool } from '../src/game-state.js';
 
 const cities = [
   { id: 1, name: 'A', lat: 45, lon: 25, pop: 100 },
@@ -184,6 +184,28 @@ test('resolveCheckpoint: removed cards are not counted as wrong', () => {
   const out = resolveCheckpoint(g, { p1: 1, p2: 2 }); // truth is 1 → p1 exact
   assert.equal(out.players.find((p) => p.id === 'p1').diamonds, 7);
   assert.equal(out.players.find((p) => p.id === 'p2').diamonds, 5);
+});
+
+test('a player at zero is not knocked out: a lost contra is paid by the bank', () => {
+  // p1 already empty; build a wrong placement by p1, p2 contras correctly.
+  let g = createGame({ variant: 'cardinal', numTurns: 20, seed: 5,
+    players: [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }], cities });
+  g = { ...g, players: g.players.map((p) => p.id === 'p1' ? { ...p, diamonds: 0 } : p) };
+  const anchor = g.placements[0].city;
+  const drawn = g.deck.cards[g.deck.pos];
+  const dir = drawn.lat > anchor.lat ? 'S' : 'N'; // guaranteed wrong
+  g = placeCard(g, { dir, index: 0 });             // p1 places wrong (challenge window)
+  g = challenge(g);                                // p2 contras correctly
+  assert.equal(g.players.find((p) => p.id === 'p1').diamonds, 0); // stays at 0, not negative
+  assert.equal(g.players.find((p) => p.id === 'p2').diamonds, 6); // still gains, from the bank
+});
+
+test('pickPool keeps only the most populous cities', () => {
+  const cs = [
+    { id: 1, pop: 100 }, { id: 2, pop: 900 }, { id: 3, pop: 500 }, { id: 4, pop: 300 },
+  ];
+  assert.deepEqual(pickPool(cs, 2).map((c) => c.id), [2, 3]);   // top 2 by population
+  assert.equal(pickPool(cs, Infinity).length, 4);              // legendar keeps everything
 });
 
 test('isGameOver + winners', () => {

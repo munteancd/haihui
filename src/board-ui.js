@@ -1,5 +1,6 @@
 import { placeCard, challenge, passChallenge, continueAfterContra,
          needsCheckpoint, resolveCheckpoint, isGameOver, winners } from './game-state.js';
+import { isBot, botEstimate } from './bot.js';
 
 // Controlled board: renders a shared game `state` and only enables controls when it is
 // THIS device's turn (state.players[currentPlayerIndex].id === myId). Every local action
@@ -10,12 +11,15 @@ import { placeCard, challenge, passChallenge, continueAfterContra,
 // their name face-up; their data lives on the back and is flipped into view only when a
 // checkpoint or a knocked-off (correct) contra reveals it. On your turn the drawn card is
 // shown face-up and can be dragged (or tapped) onto a drop zone between/around the cards.
-export function renderBoard(root, { state, myId, onAction = () => {} }) {
+export function renderBoard(root, { state, myId, isHost = false, onAction = () => {} }) {
   let current = state;
 
   const setState = (s) => { current = s; draw(); };
   const commit = (s) => { current = s; onAction(s); draw(); };
   const myTurn = () => current.players[current.currentPlayerIndex].id === myId;
+  // A checkpoint is driven by the current player's device; if that player is a bot, the
+  // host drives it instead (bots never have a device of their own).
+  const iDriveCheckpoint = () => myTurn() || (isHost && isBot(current.players[current.currentPlayerIndex]));
   const anchorCity = () => current.placements[0].city;
   const placementOf = (cityId) => current.placements.find((p) => p.city.id === cityId);
   const drawnCard = () => current.deck.cards[current.deck.pos];
@@ -199,16 +203,20 @@ export function renderBoard(root, { state, myId, onAction = () => {} }) {
   }
 
   function renderCheckpoint() {
-    // Everyone sees the board revealed; only the current player's device enters estimates.
+    // Everyone sees the board revealed; the driving device enters estimates. Bot players
+    // get an automatic (pre-filled) guess so a human need only enter the human guesses.
     const board = `<div id="board">${boardHtml(true)}</div>`;
-    if (!myTurn()) {
+    if (!iDriveCheckpoint()) {
       root.innerHTML = `${header()}${board}<p>Se punctează checkpoint-ul…</p>`;
       return;
     }
     root.innerHTML = `${header()}${board}
       <h3>Checkpoint — câte cărți sunt greșite pe tablă?</h3>
-      ${current.players.map((p) =>
-        `<label>${p.name} <input data-p="${p.id}" type="number" min="0" value="0" /></label>`).join('')}
+      ${current.players.map((p) => {
+        const bot = isBot(p);
+        return `<label>${p.name}${bot ? ' 🤖' : ''} <input data-p="${p.id}" type="number" min="0"
+          value="${bot ? botEstimate(current) : 0}"${bot ? ' disabled' : ''} /></label>`;
+      }).join('')}
       <button id="score">Punctează</button>`;
     root.querySelector('#score').onclick = () => {
       const est = {};
