@@ -101,7 +101,7 @@ test('correct contra: challenger takes a diamond and the card is removed from th
   assert.equal(g.placements[g.placements.length - 1].revealed, true);
 });
 
-test('wrong contra: challenger gives a diamond and the card stays (revealed)', () => {
+test('wrong contra: challenger gives a diamond and the card stays face-up (not revealed)', () => {
   // build a known-correct placement, then challenge it
   let g = createGame({ variant: 'cardinal', numTurns: 20, seed: 5,
     players: [{ id: 'p1', name: 'Cristi' }, { id: 'p2', name: 'Lore' }], cities });
@@ -116,7 +116,7 @@ test('wrong contra: challenger gives a diamond and the card stays (revealed)', (
   assert.equal(p2.diamonds, 4);
   assert.equal(g.arms[dir].length, 1);             // card stays on the board
   assert.equal(g.removed.length, 0);
-  assert.equal(g.placements[g.placements.length - 1].revealed, true);
+  assert.equal(g.placements[g.placements.length - 1].revealed, false); // stays face-up (name)
 });
 
 test('passChallenge moves the right to challenge to the next player, then closes', () => {

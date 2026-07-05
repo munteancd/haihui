@@ -1,4 +1,4 @@
-const CACHE = 'haihui-v3';
+const CACHE = 'haihui-v4';
 const ASSETS = ['./', './index.html', './css/style.css', './src/main.js'];
 
 self.addEventListener('install', (e) => {

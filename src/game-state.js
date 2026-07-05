@@ -14,8 +14,8 @@ export function createGame({ variant, numTurns, seed, players, cities }) {
 
   const anchorPlacement =
     variant === 'cardinal'
-      ? { playerId: null, city: anchor, dir: null, index: null, isCorrect: true, revealed: true }
-      : { playerId: null, city: anchor, index: 0, isCorrect: true, revealed: true };
+      ? { playerId: null, city: anchor, dir: null, index: null, isCorrect: true, revealed: false }
+      : { playerId: null, city: anchor, index: 0, isCorrect: true, revealed: false };
 
   return {
     variant,
@@ -110,8 +110,10 @@ export function challenge(state) {
     ? moveDiamond(state.players, placerIndex, challengerIndex)
     : moveDiamond(state.players, challengerIndex, placerIndex);
 
+  // A correct contra reveals the card (its data) as it leaves the board; a failed contra
+  // leaves the card on the board face-up (name), so it is not revealed to its data side.
   const placements = state.placements.map((p, i) =>
-    i === idx ? { ...p, revealed: true, removed: contraCorrect } : p);
+    i === idx ? { ...p, revealed: contraCorrect, removed: contraCorrect } : p);
 
   let line = state.line;
   let arms = state.arms;

@@ -43,3 +43,16 @@ select, input { font-size:15px; padding:6px 8px; border-radius:6px; border:1px s
 .discard { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:12px;
   padding-top:10px; border-top:1px dashed var(--line); font-size:12px; opacity:.85; }
 .discard span { opacity:.7; }
+
+/* The drawn card and its drop zones. */
+.draw-banner { display:flex; align-items:center; gap:10px; margin:10px 0; flex-wrap:wrap;
+  font-size:13px; }
+.card.draggable { touch-action:none; cursor:grab; box-shadow:0 0 0 2px var(--accent); }
+.card.draggable:active { cursor:grabbing; }
+.drag-clone { position:fixed; z-index:1000; pointer-events:none; transform:translate(-50%,-50%);
+  opacity:.92; margin:0; }
+.dz { border:1.5px dashed #3a5372; border-radius:6px; flex:0 0 auto; transition:background .1s; }
+.arm-n .dz, .arm-s .dz { width:64px; height:14px; }
+.arm-e .dz, .arm-v .dz { width:14px; height:60px; }
+.line .dz { width:16px; align-self:stretch; }
+.dz-over { background:var(--accent); border-color:var(--accent); box-shadow:0 0 8px var(--accent); }

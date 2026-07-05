@@ -3,12 +3,13 @@ import { placeCard, challenge, passChallenge,
 
 // Controlled board: renders a shared game `state` and only enables controls when it is
 // THIS device's turn (state.players[currentPlayerIndex].id === myId). Every local action
-// produces a new state and is handed to `onAction(newState)` so the caller can persist it
-// to Supabase. Remote updates arrive via the returned `setState`.
+// produces a new state and is handed to `onAction(newState)` so the caller can persist it.
+// Remote updates arrive via the returned `setState`.
 //
 // Cardinal games are drawn as a plus: four arms grow outward from the anchor. Cards show
-// their name face-up; their data lives on the back and is flipped into view when a contra
-// or a checkpoint reveals them.
+// their name face-up; their data lives on the back and is flipped into view only when a
+// checkpoint or a knocked-off (correct) contra reveals it. On your turn the drawn card is
+// shown face-up and can be dragged (or tapped) onto a drop zone between/around the cards.
 export function renderBoard(root, { state, myId, onAction = () => {} }) {
   let current = state;
 
@@ -16,11 +17,11 @@ export function renderBoard(root, { state, myId, onAction = () => {} }) {
   const commit = (s) => { current = s; onAction(s); draw(); };
   const myTurn = () => current.players[current.currentPlayerIndex].id === myId;
   const anchorCity = () => current.placements[0].city;
-  const placementOf = (cityId) =>
-    current.placements.find((p) => p.city.id === cityId);
+  const placementOf = (cityId) => current.placements.find((p) => p.city.id === cityId);
+  const drawnCard = () => current.deck.cards[current.deck.pos];
 
   // A card: name on the face, data on the back. `revealed` flips it to show the data.
-  function cardEl(city, { revealed = false, faded = false, anchor = false } = {}) {
+  function cardEl(city, { revealed = false, faded = false, anchor = false, draggable = false, id = '' } = {}) {
     const data = current.variant === 'cardinal'
       ? `${city.lat.toFixed(1)}, ${city.lon.toFixed(1)}`
       : city.pop.toLocaleString();
@@ -28,9 +29,15 @@ export function renderBoard(root, { state, myId, onAction = () => {} }) {
     if (revealed) cls.push('revealed');
     if (faded) cls.push('faded');
     if (anchor) cls.push('anchor-card');
-    return `<div class="${cls.join(' ')}"><div class="card-inner">
+    if (draggable) cls.push('draggable');
+    return `<div class="${cls.join(' ')}"${id ? ` id="${id}"` : ''}><div class="card-inner">
       <div class="card-face">${city.name}</div>
       <div class="card-back">${data}</div></div></div>`;
+  }
+
+  // A drop target. `dir` is '' for population. Carries where a placed card would go.
+  function zone(dir, index) {
+    return `<div class="dz" data-dir="${dir}" data-index="${index}"></div>`;
   }
 
   function header() {
@@ -41,28 +48,55 @@ export function renderBoard(root, { state, myId, onAction = () => {} }) {
       <p>La rând: <b>${cur.name}</b>${you ? ` — tu ești <b>${you.name}</b>` : ''}</p>`;
   }
 
-  function armHtml(dir, reverse, revealAll) {
-    let cards = current.arms[dir].map((c) =>
-      cardEl(c, { revealed: revealAll || placementOf(c.id)?.revealed }));
-    if (reverse) cards = cards.reverse();
-    return cards.join('');
+  // The card currently drawn from the deck, shown to everyone during the placing phase.
+  function drawBanner() {
+    if (current.phase !== 'placing') return '';
+    const card = drawnCard();
+    if (!card) return '';
+    if (myTurn()) {
+      return `<div class="draw-banner"><span>Trage cartea pe locul potrivit (sau apasă un loc):</span>
+        ${cardEl(card, { id: 'draw-card', draggable: true })}</div>`;
+    }
+    return `<div class="draw-banner"><span>Carte la rând:</span>${cardEl(card)}</div>`;
+  }
+
+  // One arm as an interleaved sequence: zone, card, zone, card, …, zone. Reversed arms
+  // (N, V) grow away from the anchor, so the whole sequence is flipped; data-index on each
+  // zone keeps the true insertion position regardless of visual order.
+  function armSeq(dir, reverse, revealAll, withZones) {
+    const arm = current.arms[dir];
+    const nodes = [];
+    for (let i = 0; i <= arm.length; i++) {
+      if (withZones) nodes.push(zone(dir, i));
+      if (i < arm.length) {
+        nodes.push(cardEl(arm[i], { revealed: revealAll || placementOf(arm[i].id)?.revealed }));
+      }
+    }
+    return (reverse ? nodes.reverse() : nodes).join('');
   }
 
   function boardHtml(revealAll = false) {
+    const zones = myTurn() && current.phase === 'placing' && !revealAll;
+
     if (current.variant === 'population') {
-      const cards = current.line.map((c) =>
-        cardEl(c, {
+      const nodes = [];
+      current.line.forEach((c, i) => {
+        if (zones) nodes.push(zone('', i));
+        nodes.push(cardEl(c, {
           revealed: revealAll || placementOf(c.id)?.revealed,
           anchor: c.id === anchorCity().id,
-        })).join('');
-      return `<div class="line">${cards}</div>${removedHtml()}`;
+        }));
+      });
+      if (zones) nodes.push(zone('', current.line.length));
+      return `<div class="line">${nodes.join('')}</div>${removedHtml()}`;
     }
+
     return `<div class="plus">
-      <div class="arm arm-n">${armHtml('N', true, revealAll)}</div>
-      <div class="arm arm-v">${armHtml('V', true, revealAll)}</div>
-      <div class="anchor">${cardEl(anchorCity(), { revealed: true, anchor: true })}</div>
-      <div class="arm arm-e">${armHtml('E', false, revealAll)}</div>
-      <div class="arm arm-s">${armHtml('S', false, revealAll)}</div>
+      <div class="arm arm-n">${armSeq('N', true, revealAll, zones)}</div>
+      <div class="arm arm-v">${armSeq('V', true, revealAll, zones)}</div>
+      <div class="anchor">${cardEl(anchorCity(), { anchor: true })}</div>
+      <div class="arm arm-e">${armSeq('E', false, revealAll, zones)}</div>
+      <div class="arm arm-s">${armSeq('S', false, revealAll, zones)}</div>
     </div>${removedHtml()}`;
   }
 
@@ -70,6 +104,46 @@ export function renderBoard(root, { state, myId, onAction = () => {} }) {
     if (!current.removed || current.removed.length === 0) return '';
     const cards = current.removed.map((c) => cardEl(c, { revealed: true, faded: true })).join('');
     return `<div class="discard"><span>Scoase la contră:</span>${cards}</div>`;
+  }
+
+  // Place the drawn card where a drop zone points.
+  function placeAt(dz) {
+    const dir = dz.dataset.dir;
+    const index = Number(dz.dataset.index);
+    commit(placeCard(current, dir ? { dir, index } : { index }));
+  }
+
+  // Pointer-based drag (works with touch): a floating clone follows the finger, the drop
+  // zone under it highlights, and releasing over one places the card there.
+  function wireDrag(cardNode) {
+    cardNode.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const clone = cardNode.cloneNode(true);
+      clone.classList.add('drag-clone');
+      clone.removeAttribute('id');
+      document.body.appendChild(clone);
+      const moveClone = (x, y) => { clone.style.left = `${x}px`; clone.style.top = `${y}px`; };
+      moveClone(e.clientX, e.clientY);
+
+      const highlight = (x, y) => {
+        document.querySelectorAll('.dz-over').forEach((z) => z.classList.remove('dz-over'));
+        const el = document.elementFromPoint(x, y);
+        const dz = el && el.closest('.dz');
+        if (dz) dz.classList.add('dz-over');
+        return dz;
+      };
+      const onMove = (ev) => { moveClone(ev.clientX, ev.clientY); highlight(ev.clientX, ev.clientY); };
+      const onUp = (ev) => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        clone.remove();
+        const dz = highlight(ev.clientX, ev.clientY);
+        document.querySelectorAll('.dz-over').forEach((z) => z.classList.remove('dz-over'));
+        if (dz) placeAt(dz);
+      };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    });
   }
 
   function draw() {
@@ -82,67 +156,20 @@ export function renderBoard(root, { state, myId, onAction = () => {} }) {
       renderCheckpoint();
       return;
     }
-    root.innerHTML = `${header()}<div id="board">${boardHtml()}</div><div id="controls"></div>`;
+    root.innerHTML = `${header()}${drawBanner()}<div id="board">${boardHtml()}</div><div id="controls"></div>`;
+
+    if (myTurn() && current.phase === 'placing') {
+      const card = root.querySelector('#draw-card');
+      if (card) wireDrag(card);
+      root.querySelectorAll('.dz').forEach((z) => { z.onclick = () => placeAt(z); });
+      return;
+    }
     if (!myTurn()) {
       root.querySelector('#controls').innerHTML =
         `<p>Așteaptă pe <b>${current.players[current.currentPlayerIndex].name}</b>…</p>`;
       return;
     }
-    current.phase === 'placing' ? renderPlaceControls() : renderChallengeControls();
-  }
-
-  // Slot options for population: named gaps in the line.
-  function lineSlots() {
-    const line = current.line;
-    const opts = [];
-    for (let i = 0; i <= line.length; i++) {
-      const inner = i > 0 ? line[i - 1].name : null;
-      const outer = i < line.length ? line[i].name : null;
-      const label = !inner ? `înainte de ${outer}` : !outer ? `după ${inner}` : `între ${inner} și ${outer}`;
-      opts.push(`<option value="${i}">${label}</option>`);
-    }
-    return opts.join('');
-  }
-
-  // Slot options for a cardinal arm: named gaps from the anchor outward.
-  function armSlots(dir) {
-    const arm = current.arms[dir];
-    const opts = [];
-    for (let i = 0; i <= arm.length; i++) {
-      const inner = i > 0 ? arm[i - 1].name : anchorCity().name;
-      const outer = i < arm.length ? arm[i].name : null;
-      const label = outer ? `între ${inner} și ${outer}` : `după ${inner}`;
-      opts.push(`<option value="${i}">${label}</option>`);
-    }
-    return opts.join('');
-  }
-
-  function renderPlaceControls() {
-    const c = root.querySelector('#controls');
-    const drawn = current.deck.cards[current.deck.pos];
-
-    if (current.variant === 'population') {
-      c.innerHTML = `<p>Cartea ta: <b>${drawn.name}</b></p>
-        <label>Loc <select id="idx">${lineSlots()}</select></label>
-        <button id="place">Pune</button>`;
-      c.querySelector('#place').onclick = () =>
-        commit(placeCard(current, { index: Number(c.querySelector('#idx').value) }));
-      return;
-    }
-
-    c.innerHTML = `<p>Cartea ta: <b>${drawn.name}</b></p>
-      <label>Direcție <select id="dir">
-        <option value="N">Nord</option><option value="S">Sud</option>
-        <option value="E">Est</option><option value="V">Vest</option></select></label>
-      <label>Loc <select id="idx"></select></label>
-      <button id="place">Pune</button>`;
-    const dirSel = c.querySelector('#dir');
-    const idxSel = c.querySelector('#idx');
-    const fillIdx = () => { idxSel.innerHTML = armSlots(dirSel.value); };
-    dirSel.onchange = fillIdx;
-    fillIdx();
-    c.querySelector('#place').onclick = () =>
-      commit(placeCard(current, { dir: dirSel.value, index: Number(idxSel.value) }));
+    renderChallengeControls();
   }
 
   function renderChallengeControls() {
