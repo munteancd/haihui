@@ -1,4 +1,4 @@
-const CACHE = 'haihui-v12';
+const CACHE = 'haihui-v13';
 const ASSETS = ['./', './index.html', './css/style.css', './src/main.js'];
 
 self.addEventListener('install', (e) => {
@@ -7,11 +7,18 @@ self.addEventListener('install', (e) => {
 });
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys()
-      .then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
+  e.waitUntil((async () => {
+    const ks = await caches.keys();
+    await Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)));
+    await self.clients.claim();
+    // Force every open tab onto the fresh version. This is stronger than relying on the
+    // page's own controllerchange handler: it also rescues tabs whose page predates that
+    // handler, so a device stuck on an old service worker un-sticks itself on next visit.
+    const clients = await self.clients.matchAll({ type: 'window' });
+    for (const client of clients) {
+      if ('navigate' in client) client.navigate(client.url);
+    }
+  })());
 });
 
 // Network-first with `no-store`: always fetch the live version bypassing the browser's
