@@ -36,15 +36,21 @@ section { margin-bottom:18px; }
   transform:rotateY(180deg); font-variant-numeric:tabular-nums; }
 .card.anchor-card .card-face { background:#3b2f0b; border-color:#b58900; font-weight:600; }
 .card.faded { opacity:.5; transform:scale(.85); }
+/* A placed card that turned out wrong (shown when the board is fully revealed at the end
+   or a checkpoint): ringed red so it's clear it was mis-placed and simply never contested. */
+.card.wrong { border-radius:8px; box-shadow:0 0 0 2px #e0524a, 0 0 10px rgba(224,82,74,.7); }
 
-/* Cardinal board: a plus with four arms around the anchor. */
-.plus { display:grid; grid-template-columns:1fr auto 1fr; grid-template-rows:auto auto auto;
-  justify-items:center; align-items:center; gap:8px; padding:10px 0; overflow:auto; }
-.arm { display:flex; gap:8px; }
+/* Cardinal board: a plus with four arms around the anchor. Side columns size to their
+   content (never 1fr — that squeezes an arm and makes its cards wrap, breaking the +).
+   Arms never wrap; the whole board scrolls (see #board) when an arm runs long. */
+#board { overflow-x:auto; }
+.plus { display:grid; grid-template-columns:auto auto auto; grid-template-rows:auto auto auto;
+  justify-items:center; align-items:center; gap:8px; padding:10px 0; width:max-content; margin:0 auto; }
+.arm { display:flex; gap:8px; flex-wrap:nowrap; }
 .arm-n { grid-column:2; grid-row:1; flex-direction:column; }
-.arm-v { grid-column:1; grid-row:2; flex-direction:row; justify-content:flex-end; flex-wrap:wrap; }
+.arm-v { grid-column:1; grid-row:2; flex-direction:row; justify-content:flex-end; }
 .anchor { grid-column:2; grid-row:2; }
-.arm-e { grid-column:3; grid-row:2; flex-direction:row; justify-content:flex-start; flex-wrap:wrap; }
+.arm-e { grid-column:3; grid-row:2; flex-direction:row; justify-content:flex-start; }
 .arm-s { grid-column:2; grid-row:3; flex-direction:column; }
 
 /* Population board: a single ordered line. */

@@ -31,7 +31,7 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
 
   // A card: name on the face, data on the back. `revealed` flips it to show the data. We
   // deliberately do NOT show the country/flag — it would give away roughly where the city is.
-  function cardEl(city, { revealed = false, faded = false, anchor = false, draggable = false, id = '' } = {}) {
+  function cardEl(city, { revealed = false, faded = false, anchor = false, draggable = false, wrong = false, id = '' } = {}) {
     const data = current.variant === 'cardinal'
       ? `${city.lat.toFixed(1)}, ${city.lon.toFixed(1)}`
       : city.pop.toLocaleString();
@@ -40,6 +40,7 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     if (faded) cls.push('faded');
     if (anchor) cls.push('anchor-card');
     if (draggable) cls.push('draggable');
+    if (wrong) cls.push('wrong');
     if (city.id === animFlipId) cls.push('flip-anim');
     if (city.id === animPlaceId) cls.push('place-anim');
     return `<div class="${cls.join(' ')}"${id ? ` id="${id}"` : ''}><div class="card-inner">
@@ -107,7 +108,10 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     for (let i = 0; i <= arm.length; i++) {
       if (withZones) nodes.push(zone(dir, i));
       if (i < arm.length) {
-        nodes.push(cardEl(arm[i], { revealed: revealAll || placementOf(arm[i].id)?.revealed }));
+        nodes.push(cardEl(arm[i], {
+          revealed: revealAll || placementOf(arm[i].id)?.revealed,
+          wrong: revealAll && placementOf(arm[i].id)?.isCorrect === false,
+        }));
       }
     }
     return (reverse ? nodes.reverse() : nodes).join('');
@@ -123,6 +127,7 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
         nodes.push(cardEl(c, {
           revealed: revealAll || placementOf(c.id)?.revealed,
           anchor: c.id === anchorCity().id,
+          wrong: revealAll && placementOf(c.id)?.isCorrect === false,
         }));
       });
       if (zones) nodes.push(zone('', current.line.length));
