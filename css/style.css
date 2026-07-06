@@ -39,8 +39,12 @@ section { margin-bottom:18px; }
 /* A placed card that turned out wrong (shown when the board is fully revealed at the end
    or a checkpoint): ringed red so it's clear it was mis-placed and simply never contested. */
 .card.wrong { border-radius:8px; box-shadow:0 0 0 2px #e0524a, 0 0 10px rgba(224,82,74,.7); }
-/* The most recently played card: a teal glow so everyone can see which one is "the last". */
-.card.last { border-radius:8px; box-shadow:0 0 0 2px var(--accent), 0 0 14px rgba(79,209,197,.85); }
+/* The most recently played card: a breathing teal glow so it's obvious which one is "the last". */
+.card.last { border-radius:8px; animation: lastGlow 1.6s ease-in-out infinite; }
+@keyframes lastGlow {
+  0%,100% { box-shadow:0 0 0 2px var(--accent), 0 0 6px rgba(79,209,197,.45); }
+  50%     { box-shadow:0 0 0 2px var(--accent), 0 0 20px rgba(79,209,197,.95); }
+}
 
 /* Cardinal board: a plus with four arms around the anchor. Side columns size to their
    content (never 1fr — that squeezes an arm and makes its cards wrap, breaking the +).
@@ -86,18 +90,36 @@ section { margin-bottom:18px; }
 .card.flip-anim .card-inner { animation: flipIn .5s ease both; }
 @keyframes flipIn { from { transform: rotateY(0deg); } to { transform: rotateY(180deg); } }
 
-.card.place-anim { animation: placeIn .35s ease both; }
+/* Checkpoint reveal: each card starts face-down and flips to its data in a cascade
+   (per-card delay set inline via --d). */
+.card.reveal-flip .card-inner { animation: flipIn .55s cubic-bezier(.3,.8,.3,1.1) both;
+  animation-delay: var(--d, 0ms); }
+
+/* A freshly placed card drops in with an overshoot bounce and a quick accent flash. */
+.card.place-anim { animation: placeIn .45s cubic-bezier(.25,1.4,.5,1) both; }
 @keyframes placeIn {
-  from { opacity: 0; transform: scale(.5) translateY(-16px); }
-  to   { opacity: 1; transform: none; }
+  0%   { opacity: 0; transform: scale(.4) translateY(-24px) rotate(-6deg);
+         box-shadow: 0 0 0 3px var(--accent), 0 0 22px rgba(79,209,197,.9); }
+  60%  { opacity: 1; transform: scale(1.12) translateY(0) rotate(1.5deg);
+         box-shadow: 0 0 0 2px var(--accent), 0 0 14px rgba(79,209,197,.7); }
+  100% { transform: none; box-shadow: none; }
 }
 
-.fly-diamond { position: fixed; z-index: 1000; font-size: 22px; pointer-events: none;
-  transform: translate(0, 0); transition: transform .6s cubic-bezier(.4,.8,.3,1), opacity .6s ease; }
+.fly-diamond { position: fixed; z-index: 1000; font-size: 30px; pointer-events: none;
+  filter: drop-shadow(0 0 10px rgba(79,209,197,.9));
+  transform: translate(0, 0) scale(1) rotate(0deg);
+  transition: transform .6s cubic-bezier(.3,.9,.3,1.2), opacity .6s ease; }
 
-.dcount.pulse { display: inline-block; animation: pulse .5s ease; }
-@keyframes pulse { 0% { transform: scale(1); } 40% { transform: scale(1.5); color: var(--accent); } 100% { transform: scale(1); } }
+.dcount.pulse { display: inline-block; animation: pulse .6s ease; }
+@keyframes pulse {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.7); color: var(--accent); text-shadow: 0 0 12px var(--accent); }
+  100% { transform: scale(1); }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .card.flip-anim .card-inner, .card.place-anim, .dcount.pulse, .fly-diamond { animation: none; transition: none; }
+  .card.flip-anim .card-inner, .card.reveal-flip .card-inner, .card.place-anim,
+  .card.last, .dcount.pulse, .fly-diamond { animation: none; transition: none; }
+  /* still show the last-card ring, just without the pulsing */
+  .card.last { box-shadow: 0 0 0 2px var(--accent), 0 0 14px rgba(79,209,197,.85); }
 }

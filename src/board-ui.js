@@ -1,5 +1,6 @@
 import { placeCard, challenge, passChallenge, continueAfterContra,
-         needsCheckpoint, resolveCheckpoint, isGameOver, winners } from './game-state.js';
+         needsCheckpoint, resolveCheckpoint, continueAfterCheckpoint,
+         isGameOver, winners } from './game-state.js';
 import { isBot, botEstimate } from './bot.js';
 
 // Controlled board: renders a shared game `state` and only enables controls when it is
@@ -87,7 +88,7 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     gem.style.top = `${a.top}px`;
     document.body.appendChild(gem);
     requestAnimationFrame(() => {
-      gem.style.transform = `translate(${b.left + b.width / 2 - (a.left + a.width / 2)}px, ${b.top - a.top}px)`;
+      gem.style.transform = `translate(${b.left + b.width / 2 - (a.left + a.width / 2)}px, ${b.top - a.top}px) scale(1.8) rotate(360deg)`;
       gem.style.opacity = '0.2';
     });
     setTimeout(() => {
@@ -129,7 +130,8 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
   }
 
   function boardHtml(revealAll = false) {
-    const zones = myTurn() && current.phase === 'placing' && !revealAll;
+    // No drop zones while a checkpoint guess is pending (phase is still 'placing' then).
+    const zones = myTurn() && current.phase === 'placing' && !revealAll && !needsCheckpoint(current);
 
     if (current.variant === 'population') {
       const lastId = revealAll ? null : lastPlacedId();
@@ -214,6 +216,10 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
       renderContraResult();
       return;
     }
+    if (current.phase === 'checkpoint_reveal') {
+      renderCheckpointReveal();
+      return;
+    }
     if (needsCheckpoint(current) && current.phase === 'placing') {
       renderCheckpoint();
       return;
@@ -269,15 +275,17 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
   }
 
   function renderCheckpoint() {
-    // Everyone sees the board revealed; the driving device enters estimates. Bot players
-    // get an automatic (pre-filled) guess so a human need only enter the human guesses.
-    const board = `<div id="board">${boardHtml(true)}</div>`;
+    // The guess is made BLIND: the board stays face-down while estimates are entered. The
+    // cards only flip face-up on the reveal screen, after Punctează. Bot players get an
+    // automatic (pre-filled) guess so a human need only enter the human guesses.
+    const board = `<div id="board">${boardHtml(false)}</div>`;
     if (!iDriveCheckpoint()) {
       root.innerHTML = `${header()}${board}<p>Se punctează checkpoint-ul…</p>`;
       return;
     }
     root.innerHTML = `${header()}${board}
       <h3>Checkpoint — câte cărți sunt greșite pe tablă?</h3>
+      <p class="hint">Ghicește fără să întorci cărțile. Nimeresc exact → +2 💎; cel mai aproape → +1 💎.</p>
       ${current.players.map((p) => {
         const bot = isBot(p);
         return `<label>${p.name}${bot ? ' 🤖' : ''} <input data-p="${p.id}" type="number" min="0"
@@ -289,6 +297,27 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
       root.querySelectorAll('input[data-p]').forEach((i) => { est[i.dataset.p] = Number(i.value); });
       commit(resolveCheckpoint(current, est));
     };
+  }
+
+  // After scoring: flip the whole board face-up in a cascade so everyone sees which cards
+  // were mis-placed (red ring), the true count, and who guessed best. Continuă starts a
+  // fresh round (the board is cleared and a new anchor is drawn).
+  function renderCheckpointReveal() {
+    const cp = current.lastCheckpoint;
+    const who = cp.scorerNames.join(', ');
+    const verb = cp.exact ? 'a nimerit exact' : 'a fost cel mai aproape';
+    const msg = `Pe tablă erau <b>${cp.truth}</b> cărți greșite. <b>${who}</b> ${verb} → +${cp.reward} 💎.`;
+    root.innerHTML = `${header()}<div id="board">${boardHtml(true)}</div>
+      <div class="result"><p>${msg}</p><button id="cont">Continuă (rundă nouă)</button></div>`;
+    // Cascade the flip: every card starts face-down and flips to its data one after another.
+    root.querySelectorAll('#board .card').forEach((el, i) => {
+      el.classList.add('reveal-flip');
+      el.style.setProperty('--d', `${i * 80}ms`);
+    });
+    // Pulse the scorers' totals.
+    cp.scorerIds.forEach((id) =>
+      root.querySelector(`.pscore[data-p="${id}"] .dcount`)?.classList.add('pulse'));
+    root.querySelector('#cont').onclick = () => commit(continueAfterCheckpoint(current));
   }
 
   draw();

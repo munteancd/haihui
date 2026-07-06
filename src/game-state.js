@@ -42,10 +42,13 @@ export function createGame({ variant, numTurns, seed, players, cities, difficult
     removed: [],               // cards knocked off the board by a successful contra
     lastMove: null,            // { placementIndex, placerIndex } open to challenge
     cardsPlayed: 1,
-    phase: 'placing',          // 'placing' | 'challenge_window' | 'checkpoint' | 'ended'
+    // 'placing' | 'challenge_window' | 'contra_result' | 'checkpoint_reveal'
+    // (the checkpoint GUESS step is 'placing' + needsCheckpoint(); the reveal is its own phase)
+    phase: 'placing',
     checkpointEvery: CHECKPOINT_EVERY,
     checkpointEstimates: {},   // playerId -> guessed wrong-count during a checkpoint
     lastCheckpointAt: 0,       // cardsPlayed value of the last resolved checkpoint
+    lastCheckpoint: null,      // result of the last checkpoint, for its reveal screen
   };
 }
 
@@ -196,25 +199,68 @@ export function needsCheckpoint(state) {
 }
 
 // estimates: { playerId -> guessedWrongCount }. Exact guessers get +2 from bank;
-// if none exact, the closest (by absolute distance) get +1 each.
+// if none exact, the closest (by absolute distance) get +1 each. This SCORES the guesses
+// but does not yet reveal the board — it moves to 'checkpoint_reveal', where the cards flip
+// face-up (so the guess is made blind) and the result is shown before the next round starts.
 export function resolveCheckpoint(state, estimates) {
   const truth = boardWrongCount(state);
   const exact = state.players.filter((p) => estimates[p.id] === truth);
 
   let players;
+  let scorers;
+  let reward;
   if (exact.length > 0) {
     const winnerIds = new Set(exact.map((p) => p.id));
     players = state.players.map((p) =>
       winnerIds.has(p.id) ? { ...p, diamonds: p.diamonds + 2 } : p);
+    scorers = exact;
+    reward = 2;
   } else {
     const dist = (p) => Math.abs(estimates[p.id] - truth);
     const best = Math.min(...state.players.map(dist));
+    scorers = state.players.filter((p) => dist(p) === best);
+    const winnerIds = new Set(scorers.map((p) => p.id));
     players = state.players.map((p) =>
-      dist(p) === best ? { ...p, diamonds: p.diamonds + 1 } : p);
+      winnerIds.has(p.id) ? { ...p, diamonds: p.diamonds + 1 } : p);
+    reward = 1;
   }
   return {
-    ...state, players, phase: 'placing', checkpointEstimates: {},
+    ...state, players, phase: 'checkpoint_reveal', checkpointEstimates: {},
     lastCheckpointAt: state.cardsPlayed,
+    lastCheckpoint: {
+      truth, reward, exact: exact.length > 0,
+      estimates: { ...estimates },
+      scorerIds: scorers.map((p) => p.id),
+      scorerNames: scorers.map((p) => p.name),
+    },
+  };
+}
+
+// Leave the checkpoint reveal and start a FRESH round: the placed cards are cleared and a
+// brand-new anchor is drawn from the deck (the board never carries over between rounds).
+// Diamonds and the deck position persist; the game ends once the deck/turns run out.
+export function continueAfterCheckpoint(state) {
+  const { card: anchor, next } = draw(state.deck);
+  if (!anchor) {
+    // Deck exhausted — end the game (draw() shows the winner when cardsPlayed >= numTurns).
+    return { ...state, phase: 'placing', lastCheckpoint: null, cardsPlayed: state.numTurns };
+  }
+  const anchorPlacement =
+    state.variant === 'cardinal'
+      ? { playerId: null, city: anchor, dir: null, index: null, isCorrect: true, revealed: false }
+      : { playerId: null, city: anchor, index: 0, isCorrect: true, revealed: false };
+  return {
+    ...state,
+    deck: next,
+    placements: [anchorPlacement],
+    line: state.variant === 'population' ? [anchor] : undefined,
+    arms: state.variant === 'cardinal' ? { N: [], S: [], E: [], V: [] } : undefined,
+    removed: [],
+    lastMove: null,
+    lastResult: null,
+    lastCheckpoint: null,
+    cardsPlayed: state.cardsPlayed + 1,
+    phase: 'placing',
   };
 }
 

@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, placeCard, challenge, passChallenge, continueAfterContra,
-  needsCheckpoint, resolveCheckpoint, isGameOver, winners, pickPool } from '../src/game-state.js';
+  needsCheckpoint, resolveCheckpoint, continueAfterCheckpoint,
+  isGameOver, winners, pickPool } from '../src/game-state.js';
 
 const cities = [
   { id: 1, name: 'A', lat: 45, lon: 25, pop: 100 },
@@ -184,6 +185,43 @@ test('resolveCheckpoint: removed cards are not counted as wrong', () => {
   const out = resolveCheckpoint(g, { p1: 1, p2: 2 }); // truth is 1 → p1 exact
   assert.equal(out.players.find((p) => p.id === 'p1').diamonds, 7);
   assert.equal(out.players.find((p) => p.id === 'p2').diamonds, 5);
+});
+
+test('resolveCheckpoint moves to the reveal phase (board stays hidden until scored)', () => {
+  const g = {
+    variant: 'cardinal',
+    players: [{ id: 'p1', name: 'A', diamonds: 5 }, { id: 'p2', name: 'B', diamonds: 5 }],
+    placements: [{ dir: null, isCorrect: true }, { dir: 'N', isCorrect: false }],
+    cardsPlayed: 15,
+  };
+  const out = resolveCheckpoint(g, { p1: 1, p2: 0 });
+  assert.equal(out.phase, 'checkpoint_reveal');
+  assert.equal(out.lastCheckpoint.truth, 1);
+  assert.equal(out.lastCheckpoint.reward, 2);
+  assert.deepEqual(out.lastCheckpoint.scorerIds, ['p1']);
+  assert.deepEqual(out.lastCheckpoint.scorerNames, ['A']);
+});
+
+test('continueAfterCheckpoint clears the board and deals a fresh anchor', () => {
+  let g = createGame({ variant: 'cardinal', numTurns: 40, seed: 7,
+    players: [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }], cities });
+  // Simulate a round's worth of cards on the board, then a resolved checkpoint reveal.
+  g = placeCard(g, { dir: 'N', index: 0 });
+  const prevAnchor = g.placements[0].city;
+  const prevCardsPlayed = g.cardsPlayed;
+  const prevDeckPos = g.deck.pos;
+  g = { ...g, phase: 'checkpoint_reveal', lastCheckpoint: { truth: 0 } };
+
+  const out = continueAfterCheckpoint(g);
+  assert.equal(out.phase, 'placing');
+  assert.equal(out.placements.length, 1);            // only the new anchor remains
+  assert.deepEqual(out.arms, { N: [], S: [], E: [], V: [] });
+  assert.equal(out.removed.length, 0);
+  assert.equal(out.lastCheckpoint, null);
+  assert.equal(out.deck.pos, prevDeckPos + 1);        // one card drawn for the new anchor
+  assert.equal(out.cardsPlayed, prevCardsPlayed + 1);
+  assert.notEqual(out.placements[0].city.id, prevAnchor.id); // a different (new) anchor
+  assert.equal(out.placements[0].isCorrect, true);
 });
 
 test('a player at zero is not knocked out: a lost contra is paid by the bank', () => {
