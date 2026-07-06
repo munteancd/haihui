@@ -22,6 +22,14 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
   const iDriveCheckpoint = () => myTurn() || (isHost && isBot(current.players[current.currentPlayerIndex]));
   const anchorCity = () => current.placements[0].city;
   const placementOf = (cityId) => current.placements.find((p) => p.city.id === cityId);
+  // The most recently placed card still on the board (skips the anchor and any card a
+  // successful contra knocked off). Used to glow "the last card played".
+  const lastPlacedId = () => {
+    for (let i = current.placements.length - 1; i >= 1; i--) {
+      if (!current.placements[i].removed) return current.placements[i].city.id;
+    }
+    return null;
+  };
   const drawnCard = () => current.deck.cards[current.deck.pos];
 
   // Card ids that should play a one-shot animation on the next render.
@@ -31,7 +39,7 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
 
   // A card: name on the face, data on the back. `revealed` flips it to show the data. We
   // deliberately do NOT show the country/flag — it would give away roughly where the city is.
-  function cardEl(city, { revealed = false, faded = false, anchor = false, draggable = false, wrong = false, id = '' } = {}) {
+  function cardEl(city, { revealed = false, faded = false, anchor = false, draggable = false, wrong = false, last = false, id = '' } = {}) {
     const data = current.variant === 'cardinal'
       ? `${city.lat.toFixed(1)}, ${city.lon.toFixed(1)}`
       : city.pop.toLocaleString();
@@ -41,6 +49,7 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     if (anchor) cls.push('anchor-card');
     if (draggable) cls.push('draggable');
     if (wrong) cls.push('wrong');
+    if (last) cls.push('last');
     if (city.id === animFlipId) cls.push('flip-anim');
     if (city.id === animPlaceId) cls.push('place-anim');
     return `<div class="${cls.join(' ')}"${id ? ` id="${id}"` : ''}><div class="card-inner">
@@ -104,6 +113,7 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
   // zone keeps the true insertion position regardless of visual order.
   function armSeq(dir, reverse, revealAll, withZones) {
     const arm = current.arms[dir];
+    const lastId = revealAll ? null : lastPlacedId();
     const nodes = [];
     for (let i = 0; i <= arm.length; i++) {
       if (withZones) nodes.push(zone(dir, i));
@@ -111,6 +121,7 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
         nodes.push(cardEl(arm[i], {
           revealed: revealAll || placementOf(arm[i].id)?.revealed,
           wrong: revealAll && placementOf(arm[i].id)?.isCorrect === false,
+          last: arm[i].id === lastId,
         }));
       }
     }
@@ -121,6 +132,7 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     const zones = myTurn() && current.phase === 'placing' && !revealAll;
 
     if (current.variant === 'population') {
+      const lastId = revealAll ? null : lastPlacedId();
       const nodes = [];
       current.line.forEach((c, i) => {
         if (zones) nodes.push(zone('', i));
@@ -128,6 +140,7 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
           revealed: revealAll || placementOf(c.id)?.revealed,
           anchor: c.id === anchorCity().id,
           wrong: revealAll && placementOf(c.id)?.isCorrect === false,
+          last: c.id === lastId,
         }));
       });
       if (zones) nodes.push(zone('', current.line.length));
