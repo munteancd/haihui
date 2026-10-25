@@ -1,6 +1,6 @@
-import { placeCard, challenge, passChallenge } from './game-state.js';
-import { isArmInsertCorrect } from './rules-cardinal.js';
-import { isInsertCorrect } from './rules-population.js';
+import { placeCard, challenge, passChallenge, contestOptions } from './game-state.js';
+import { isArmInsertCorrect, isContestedPairCorrect as isArmPairCorrect } from './rules-cardinal.js';
+import { isInsertCorrect, isContestedPairCorrect as isLinePairCorrect } from './rules-population.js';
 
 // Simple, beatable bots for solo testing. They are not perfect on purpose: they place a
 // wrong card now and then (so you have something to contra) and they miss some contras.
@@ -17,7 +17,8 @@ function randOf(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// Enumerate every legal slot for the drawn card, flagged by whether it would be correct.
+// Enumerate every legal slot for the drawn card, flagged by whether it would fit both
+// neighbours.
 function cardinalOptions(state, card) {
   const anchor = state.placements[0].city;
   const opts = [];
@@ -51,17 +52,25 @@ export function botPlace(state) {
   return placeCard(state, move);
 }
 
-// The bot decides whether to contra the last placement: usually catches wrong placements,
-// occasionally bluff-calls a correct one.
+// The bot decides whether to contra the last placement. It checks the card against each
+// neighbour it could flip: if one of them shows the card is out of order it usually
+// contests against exactly that neighbour; otherwise it occasionally bluff-calls one.
 export function botDecideChallenge(state) {
   const placement = state.placements[state.lastMove.placementIndex];
-  const chance = placement.isCorrect ? CONTRA_WHEN_RIGHT : CONTRA_WHEN_WRONG;
-  return Math.random() < chance ? challenge(state) : passChallenge(state);
+  const options = contestOptions(state);
+  const wrongSides = options.filter((o) => (state.variant === 'cardinal'
+    ? !isArmPairCorrect(placement.city, o.city, o.side, placement.dir)
+    : !isLinePairCorrect(placement.city, o.city, o.side)));
+  if (wrongSides.length > 0) {
+    return Math.random() < CONTRA_WHEN_WRONG ? challenge(state, randOf(wrongSides).side) : passChallenge(state);
+  }
+  return Math.random() < CONTRA_WHEN_RIGHT ? challenge(state, randOf(options).side) : passChallenge(state);
 }
 
-// A rough (non-omniscient) checkpoint guess for a bot: a small number near what's on the board.
+// A rough (non-omniscient) scoring guess for a bot: a small number near what's on the board.
 export function botEstimate(state) {
-  const onBoard = state.placements.filter((p) => p.dir !== null && !p.removed).length
-    || (state.line ? state.line.length - 1 : 0);
+  const onBoard = state.variant === 'cardinal'
+    ? Object.values(state.arms).reduce((n, arm) => n + arm.length, 0)
+    : state.line.length - 1;
   return Math.max(0, Math.round(Math.random() * Math.min(4, onBoard)));
 }

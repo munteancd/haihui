@@ -1,104 +1,129 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame, placeCard, challenge, passChallenge, continueAfterContra,
-  needsCheckpoint, resolveCheckpoint, continueAfterCheckpoint,
-  isGameOver, winners, pickPool } from '../src/game-state.js';
+import { createGame, dealDeck, placeCard, challenge, contestOptions, passChallenge,
+  continueAfterContra, needsCheckpoint, resolveCheckpoint, continueAfterCheckpoint,
+  wrongOnBoard, cardsThisRound, isGameOver, winners,
+  START_DIAMONDS, ROUND_SIZE } from '../src/game-state.js';
+import { isArmInsertCorrect } from '../src/rules-cardinal.js';
 
-const cities = [
-  { id: 1, name: 'A', lat: 45, lon: 25, pop: 100 },
-  { id: 2, name: 'B', lat: 47, lon: 23, pop: 300 },
-  { id: 3, name: 'C', lat: 44, lon: 26, pop: 500 },
-  { id: 4, name: 'D', lat: 46, lon: 27, pop: 700 },
-];
+// Enough distinct cities for a full game (3 start cards + 45 to place).
+function makeCities(n) {
+  return Array.from({ length: n }, (_, i) => ({
+    id: i + 1, name: `C${i + 1}`,
+    lat: 43 + ((i * 7) % 50) / 10, lon: 20 + ((i * 11) % 90) / 10, pop: 1000 + i * 37,
+  }));
+}
+const cities = makeCities(60);
+const twoPlayers = [{ id: 'p1', name: 'Cristi' }, { id: 'p2', name: 'Lore' }];
 
-test('createGame seats players, deals 5 diamonds, plays anchor card', () => {
-  const g = createGame({
-    variant: 'cardinal',
-    numTurns: 20,
-    seed: 5,
-    players: [{ id: 'p1', name: 'Cristi' }, { id: 'p2', name: 'Lore' }],
-    cities,
-  });
+const newGame = (extra = {}) =>
+  createGame({ variant: 'cardinal', seed: 5, players: twoPlayers, cards: cities, ...extra });
+
+// A cardinal game whose board is fully controlled: anchor at lat 45 / lon 25, then `deck`.
+function rigged(deck, extra = {}) {
+  const g = newGame(extra);
+  const anchor = { id: 100, name: 'Anchor', lat: 45, lon: 25, pop: 5000 };
+  return {
+    ...g,
+    placements: [{ playerId: null, city: anchor, dir: null, index: null }],
+    deck: { cards: deck, pos: 0 },
+  };
+}
+const city = (id, lat, lon = 25, pop = 1000) => ({ id, name: `X${id}`, lat, lon, pop });
+
+// Nobody contests: every eligible player passes until the window closes.
+function passAll(g) {
+  while (g.phase === 'challenge_window') g = passChallenge(g);
+  return g;
+}
+
+// Place cards at the N tip (nobody contests) until a scoring is due.
+function playRound(g) {
+  while (!needsCheckpoint(g)) g = passAll(placeCard(g, { dir: 'N', index: g.arms.N.length }));
+  return g;
+}
+
+test('createGame seats players with 4 diamonds and lays a start card', () => {
+  const g = newGame();
+  assert.equal(START_DIAMONDS, 4);
   assert.equal(g.players.length, 2);
-  assert.ok(g.players.every((p) => p.diamonds === 5));
-  assert.equal(g.placements.length, 1);            // anchor already on the table
+  assert.ok(g.players.every((p) => p.diamonds === 4));
+  assert.equal(g.placements.length, 1);            // start card already on the table
   assert.equal(g.placements[0].dir, null);
-  assert.equal(g.placements[0].isCorrect, true);
   assert.deepEqual(g.arms, { N: [], S: [], E: [], V: [] });
   assert.deepEqual(g.removed, []);
-  assert.equal(g.cardsPlayed, 1);
+  assert.equal(g.cardsPlayed, 0);                   // the start card is not a placed card
+  assert.equal(g.round, 1);
+  assert.equal(g.numRounds, 3);
   assert.equal(g.phase, 'placing');
-  assert.equal(g.currentPlayerIndex, 0);           // player after the one who laid the anchor
+  assert.equal(g.currentPlayerIndex, 0);
+});
+
+test('the draw pile holds 15 cards per round; start cards are set aside outside it', () => {
+  const g = newGame();
+  assert.equal(ROUND_SIZE, 15);
+  assert.equal(g.deck.cards.length, 45);
+  assert.equal(g.startCards.length, 3);
+  assert.equal(g.placements[0].city.id, g.startCards[0].id);
+  const pileIds = new Set(g.deck.cards.map((c) => c.id));
+  assert.ok(g.startCards.every((c) => !pileIds.has(c.id)));
+
+  const { startCards, cards } = dealDeck(cities, 2, 9);
+  assert.equal(startCards.length, 2);
+  assert.equal(cards.length, 30);
 });
 
 test('placeCard (cardinal) grows the chosen arm, advances turn, opens challenge window', () => {
-  let g = createGame({ variant: 'cardinal', numTurns: 20, seed: 5,
-    players: [{ id: 'p1', name: 'Cristi' }, { id: 'p2', name: 'Lore' }], cities });
+  let g = newGame();
   const drawn = g.deck.cards[g.deck.pos];
   g = placeCard(g, { dir: 'N', index: 0 });
-
   const last = g.placements[g.placements.length - 1];
   assert.equal(last.city.id, drawn.id);
   assert.equal(last.dir, 'N');
-  assert.equal(last.revealed, false);
-  assert.equal(typeof last.isCorrect, 'boolean');
-  assert.equal(g.arms.N[0].id, drawn.id);          // card is on the north arm
-  assert.equal(g.cardsPlayed, 2);
+  assert.equal(g.arms.N[0].id, drawn.id);
+  assert.equal(g.cardsPlayed, 1);
   assert.equal(g.phase, 'challenge_window');
   assert.equal(g.lastMove.placerIndex, 0);
-  assert.equal(g.currentPlayerIndex, 1); // next player up
+  assert.equal(g.currentPlayerIndex, 1);           // next player may contest first
 });
 
 test('placeCard (cardinal) can insert between two cards on an arm', () => {
-  // anchor A(lat45). Put a card far south, then insert one between anchor and it.
-  let g = createGame({ variant: 'cardinal', numTurns: 20, seed: 5,
-    players: [{ id: 'p1', name: 'Cristi' }, { id: 'p2', name: 'Lore' }], cities });
-  const anchor = g.placements[0].city;
-  const far = { id: 90, name: 'Far', lat: anchor.lat - 10, lon: anchor.lon };
-  const mid = { id: 91, name: 'Mid', lat: anchor.lat - 5, lon: anchor.lon };
-  g = { ...g, deck: { cards: [far, mid], pos: 0 } };
-  g = placeCard(g, { dir: 'S', index: 0 });        // Far at tip of south arm
-  g = { ...g, phase: 'placing', currentPlayerIndex: g.lastMove.placerIndex }; // skip challenge
-  g = placeCard(g, { dir: 'S', index: 0 });        // Mid between anchor and Far
-  assert.deepEqual(g.arms.S.map((c) => c.id), [91, 90]);
-  const last = g.placements[g.placements.length - 1];
-  assert.equal(last.isCorrect, true);              // 40 is between anchor 45 and Far 35
+  let g = rigged([city(1, 35), city(2, 40)]);
+  g = passAll(placeCard(g, { dir: 'S', index: 0 })); // 35 at the tip
+  g = placeCard(g, { dir: 'S', index: 0 });           // 40 between the anchor and 35
+  assert.deepEqual(g.arms.S.map((c) => c.id), [2, 1]);
 });
 
 test('placeCard (population) inserts into the line at the chosen index', () => {
-  let g = createGame({ variant: 'population', numTurns: 20, seed: 5,
-    players: [{ id: 'p1', name: 'Cristi' }, { id: 'p2', name: 'Lore' }], cities });
+  let g = createGame({ variant: 'population', seed: 5, players: twoPlayers, cards: cities });
   const drawn = g.deck.cards[g.deck.pos];
   g = placeCard(g, { index: 0 });
   assert.equal(g.line[0].id, drawn.id);
   assert.equal(g.line.length, 2);
 });
 
-// Force a known-wrong placement so we can test challenge outcomes deterministically.
-function wrongPlacement() {
-  let g = createGame({ variant: 'cardinal', numTurns: 20, seed: 5,
-    players: [{ id: 'p1', name: 'Cristi' }, { id: 'p2', name: 'Lore' }], cities });
-  const anchor = g.placements[0].city;
-  const drawn = g.deck.cards[g.deck.pos];
-  // pick a direction guaranteed wrong: if drawn is north, place it South, else North
-  const dir = drawn.lat > anchor.lat ? 'S' : 'N';
-  g = placeCard(g, { dir, index: 0 });
-  return g; // placer = p1, challenge window open, currentPlayer = p2 (to the right)
-}
+test('a card at a tip can only be contested against its inner neighbour', () => {
+  let g = rigged([city(1, 50)]);
+  g = placeCard(g, { dir: 'N', index: 0 });
+  const opts = contestOptions(g);
+  assert.equal(opts.length, 1);
+  assert.equal(opts[0].side, 'prev');
+  assert.equal(opts[0].city.id, 100);              // the start card
+});
 
-test('correct contra: reveals, moves a diamond, removes the card, then continues', () => {
-  let g = wrongPlacement();
-  const arm = g.placements[g.placements.length - 1].dir;
-  g = challenge(g); // p2 challenges a wrong placement
-  // pauses on the result screen with the outcome and the reveal
+test('correct contra: placer pays a diamond, card leaves the game, both cards shown', () => {
+  let g = rigged([city(1, 40)]);                     // 40 is south of the anchor...
+  g = placeCard(g, { dir: 'N', index: 0 });          // ...but placed North
+  g = challenge(g);
   assert.equal(g.phase, 'contra_result');
   assert.equal(g.lastResult.contraCorrect, true);
-  assert.equal(g.players.find((p) => p.id === 'p1').diamonds, 4);
-  assert.equal(g.players.find((p) => p.id === 'p2').diamonds, 6);
-  assert.equal(g.arms[arm].length, 0);             // card knocked off its arm
-  assert.equal(g.removed.length, 1);               // and into the removed pile
+  assert.equal(g.lastResult.card.id, 1);
+  assert.equal(g.lastResult.neighbour.id, 100);
+  assert.equal(g.players.find((p) => p.id === 'p1').diamonds, 3);
+  assert.equal(g.players.find((p) => p.id === 'p2').diamonds, 5);
+  assert.equal(g.arms.N.length, 0);
+  assert.equal(g.removed.length, 1);
   assert.equal(g.placements[g.placements.length - 1].removed, true);
-  assert.equal(g.placements[g.placements.length - 1].revealed, true);
 
   g = continueAfterContra(g);
   assert.equal(g.phase, 'placing');
@@ -107,164 +132,211 @@ test('correct contra: reveals, moves a diamond, removes the card, then continues
   assert.equal(g.currentPlayerIndex, 1);           // placer(0) + 1 places next
 });
 
-test('wrong contra: reveals + gives a diamond, card stays; after continue it flips back to its name', () => {
-  // build a known-correct placement, then challenge it
-  let g = createGame({ variant: 'cardinal', numTurns: 20, seed: 5,
-    players: [{ id: 'p1', name: 'Cristi' }, { id: 'p2', name: 'Lore' }], cities });
-  const anchor = g.placements[0].city;
-  const drawn = g.deck.cards[g.deck.pos];
-  const dir = drawn.lat > anchor.lat ? 'N' : 'S'; // guaranteed correct
-  g = placeCard(g, { dir, index: 0 });
+test('wrong contra: contester pays a diamond, both cards stay', () => {
+  let g = rigged([city(1, 50)]);
+  g = placeCard(g, { dir: 'N', index: 0 });
   g = challenge(g);
-  assert.equal(g.phase, 'contra_result');
   assert.equal(g.lastResult.contraCorrect, false);
-  assert.equal(g.players.find((p) => p.id === 'p1').diamonds, 6);
-  assert.equal(g.players.find((p) => p.id === 'p2').diamonds, 4);
-  assert.equal(g.arms[dir].length, 1);             // card stays on the board
+  assert.equal(g.players.find((p) => p.id === 'p1').diamonds, 5);
+  assert.equal(g.players.find((p) => p.id === 'p2').diamonds, 3);
+  assert.equal(g.arms.N.length, 1);
   assert.equal(g.removed.length, 0);
-  assert.equal(g.placements[g.placements.length - 1].revealed, true); // revealed during result
-
   g = continueAfterContra(g);
-  assert.equal(g.placements[g.placements.length - 1].revealed, false); // flips back to its name
   assert.equal(g.phase, 'placing');
+});
+
+test('a tie is correct, so contesting it loses', () => {
+  let g = rigged([city(1, 45, 30)]);                 // same latitude as the anchor
+  g = placeCard(g, { dir: 'S', index: 0 });
+  g = challenge(g);
+  assert.equal(g.lastResult.contraCorrect, false);
+  assert.equal(g.arms.S.length, 1);
+});
+
+test('between two cards the contester picks the neighbour, and only that one counts', () => {
+  // N arm: anchor 45, then 50, 55. The new card (57) goes between 50 and 55:
+  // in order against 50 (below it), out of order against 55 (above it).
+  let base = rigged([city(1, 50), city(2, 55), city(3, 57)]);
+  base = passAll(placeCard(base, { dir: 'N', index: 0 }));
+  base = passAll(placeCard(base, { dir: 'N', index: 1 }));
+  base = placeCard(base, { dir: 'N', index: 1 });
+  assert.deepEqual(base.arms.N.map((c) => c.id), [1, 3, 2]);
+  assert.deepEqual(contestOptions(base).map((o) => [o.side, o.city.id]), [['prev', 1], ['next', 2]]);
+
+  const vsInner = challenge(base, 'prev');
+  assert.equal(vsInner.lastResult.contraCorrect, false); // 57 ≥ 50: fine, the card stays
+  assert.equal(vsInner.lastResult.neighbour.id, 1);
+  assert.equal(vsInner.arms.N.length, 3);
+
+  const vsOuter = challenge(base, 'next');
+  assert.equal(vsOuter.lastResult.contraCorrect, true);  // 57 > 55: wrong, the card leaves
+  assert.equal(vsOuter.lastResult.neighbour.id, 2);
+  assert.deepEqual(vsOuter.arms.N.map((c) => c.id), [1, 2]);
+});
+
+test('population contests pick the neighbour below or above', () => {
+  let g = createGame({ variant: 'population', seed: 5, players: twoPlayers, cards: cities });
+  const anchor = { id: 100, name: 'A', lat: 45, lon: 25, pop: 500 };
+  g = { ...g, placements: [{ playerId: null, city: anchor, index: null }], line: [anchor],
+    deck: { cards: [city(1, 0, 0, 900), city(2, 0, 0, 1000)], pos: 0 } };
+  g = passAll(placeCard(g, { index: 1 }));           // 900 above the start card
+  g = placeCard(g, { index: 1 });                    // 1000 between 500 and 900
+  assert.deepEqual(contestOptions(g).map((o) => [o.side, o.city.id]), [['prev', 100], ['next', 1]]);
+  assert.equal(challenge(g, 'prev').lastResult.contraCorrect, false); // 1000 ≥ 500
+  assert.equal(challenge(g, 'next').lastResult.contraCorrect, true);  // 1000 > 900
 });
 
 test('passChallenge moves the right to challenge to the next player, then closes', () => {
-  let g = wrongPlacement(); // placer p1, currentPlayer p2
-  g = passChallenge(g);     // p2 passes; only 2 players so window closes back to placer+1
+  let g = rigged([city(1, 40)]);
+  g = placeCard(g, { dir: 'N', index: 0 });          // placer p1, current player p2
+  g = passChallenge(g);                              // only 2 players: window closes
   assert.equal(g.phase, 'placing');
-  // nobody challenged: no diamonds moved
-  assert.ok(g.players.every((p) => p.diamonds === 5));
-  assert.equal(g.currentPlayerIndex, 1); // p2 now places next
-});
-
-test('needsCheckpoint is true after every 15th card', () => {
-  const base = createGame({ variant: 'cardinal', numTurns: 40, seed: 5,
-    players: [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }], cities });
-  assert.equal(needsCheckpoint({ ...base, cardsPlayed: 15 }), true);
-  assert.equal(needsCheckpoint({ ...base, cardsPlayed: 16 }), false);
-  assert.equal(needsCheckpoint({ ...base, cardsPlayed: 30 }), true);
-});
-
-test('resolveCheckpoint: exact guessers get +2 from the bank', () => {
-  const g = {
-    variant: 'cardinal',
-    players: [{ id: 'p1', diamonds: 5 }, { id: 'p2', diamonds: 5 }, { id: 'p3', diamonds: 5 }],
-    placements: [
-      { dir: null, isCorrect: true },
-      { dir: 'N', isCorrect: false }, // 1 wrong on the board
-    ],
-  };
-  const estimates = { p1: 1, p2: 1, p3: 0 };
-  const out = resolveCheckpoint(g, estimates);
-  assert.equal(out.players.find((p) => p.id === 'p1').diamonds, 7);
-  assert.equal(out.players.find((p) => p.id === 'p2').diamonds, 7);
-  assert.equal(out.players.find((p) => p.id === 'p3').diamonds, 5);
-});
-
-test('resolveCheckpoint: nobody exact => closest get +1', () => {
-  const g = {
-    variant: 'cardinal',
-    players: [{ id: 'p1', diamonds: 5 }, { id: 'p2', diamonds: 5 }],
-    placements: [{ dir: null, isCorrect: true }, { dir: 'N', isCorrect: false },
-      { dir: 'S', isCorrect: false }], // 2 wrong
-  };
-  const out = resolveCheckpoint(g, { p1: 1, p2: 4 }); // |1-2|=1, |4-2|=2 => p1 closest
-  assert.equal(out.players.find((p) => p.id === 'p1').diamonds, 6);
-  assert.equal(out.players.find((p) => p.id === 'p2').diamonds, 5);
-});
-
-test('resolveCheckpoint: removed cards are not counted as wrong', () => {
-  const g = {
-    variant: 'cardinal',
-    players: [{ id: 'p1', diamonds: 5 }, { id: 'p2', diamonds: 5 }],
-    placements: [{ dir: null, isCorrect: true },
-      { dir: 'N', isCorrect: false, removed: true }, // knocked off — doesn't count
-      { dir: 'S', isCorrect: false }],               // 1 wrong left on the board
-  };
-  const out = resolveCheckpoint(g, { p1: 1, p2: 2 }); // truth is 1 → p1 exact
-  assert.equal(out.players.find((p) => p.id === 'p1').diamonds, 7);
-  assert.equal(out.players.find((p) => p.id === 'p2').diamonds, 5);
-});
-
-test('resolveCheckpoint moves to the reveal phase (board stays hidden until scored)', () => {
-  const g = {
-    variant: 'cardinal',
-    players: [{ id: 'p1', name: 'A', diamonds: 5 }, { id: 'p2', name: 'B', diamonds: 5 }],
-    placements: [{ dir: null, isCorrect: true }, { dir: 'N', isCorrect: false }],
-    cardsPlayed: 15,
-  };
-  const out = resolveCheckpoint(g, { p1: 1, p2: 0 });
-  assert.equal(out.phase, 'checkpoint_reveal');
-  assert.equal(out.lastCheckpoint.truth, 1);
-  assert.equal(out.lastCheckpoint.reward, 2);
-  assert.deepEqual(out.lastCheckpoint.scorerIds, ['p1']);
-  assert.deepEqual(out.lastCheckpoint.scorerNames, ['A']);
-});
-
-test('continueAfterCheckpoint clears the board and deals a fresh anchor', () => {
-  let g = createGame({ variant: 'cardinal', numTurns: 40, seed: 7,
-    players: [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }], cities });
-  // Simulate a round's worth of cards on the board, then a resolved checkpoint reveal.
-  g = placeCard(g, { dir: 'N', index: 0 });
-  const prevAnchor = g.placements[0].city;
-  const prevCardsPlayed = g.cardsPlayed;
-  const prevDeckPos = g.deck.pos;
-  g = { ...g, phase: 'checkpoint_reveal', lastCheckpoint: { truth: 0 } };
-
-  const out = continueAfterCheckpoint(g);
-  assert.equal(out.phase, 'placing');
-  assert.equal(out.placements.length, 1);            // only the new anchor remains
-  assert.deepEqual(out.arms, { N: [], S: [], E: [], V: [] });
-  assert.equal(out.removed.length, 0);
-  assert.equal(out.lastCheckpoint, null);
-  assert.equal(out.deck.pos, prevDeckPos + 1);        // one card drawn for the new anchor
-  assert.equal(out.cardsPlayed, prevCardsPlayed + 1);
-  assert.notEqual(out.placements[0].city.id, prevAnchor.id); // a different (new) anchor
-  assert.equal(out.placements[0].isCorrect, true);
+  assert.ok(g.players.every((p) => p.diamonds === 4));
+  assert.equal(g.currentPlayerIndex, 1);             // p2 places next
 });
 
 test('a player at zero is not knocked out: a lost contra is paid by the bank', () => {
-  // p1 already empty; build a wrong placement by p1, p2 contras correctly.
-  let g = createGame({ variant: 'cardinal', numTurns: 20, seed: 5,
-    players: [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }], cities });
-  g = { ...g, players: g.players.map((p) => p.id === 'p1' ? { ...p, diamonds: 0 } : p) };
+  let g = rigged([city(1, 40)]);
+  g = { ...g, players: g.players.map((p) => (p.id === 'p1' ? { ...p, diamonds: 0 } : p)) };
+  g = placeCard(g, { dir: 'N', index: 0 });          // p1 places wrong
+  g = challenge(g);                                  // p2 contras correctly
+  assert.equal(g.players.find((p) => p.id === 'p1').diamonds, 0);
+  assert.equal(g.players.find((p) => p.id === 'p2').diamonds, 5);
+});
+
+test('a round is 15 placed cards; the start card does not count', () => {
+  let g = newGame();
+  for (let i = 0; i < 14; i++) {
+    g = passAll(placeCard(g, { dir: 'N', index: g.arms.N.length }));
+    assert.equal(needsCheckpoint(g), false);
+  }
+  g = passAll(placeCard(g, { dir: 'N', index: g.arms.N.length }));
+  assert.equal(g.cardsPlayed, 15);
+  assert.equal(cardsThisRound(g), 15);
+  assert.equal(g.arms.N.length, 15);                 // 15 cards besides the start card
+  assert.equal(needsCheckpoint(g), true);
+});
+
+// Scoring states: anchor 45 with a hand-built N arm.
+function scoringState(armLats, players = [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }]) {
+  const g = rigged([city(200, 47), city(201, 48)], { players }); // cards still to draw
+  return { ...g, arms: { N: armLats.map((lat, i) => city(i + 1, lat)), S: [], E: [], V: [] }, cardsPlayed: 15 };
+}
+
+test('scoring truth comes from walking out from the start card', () => {
+  // 60 ok, 55 wrong (ref stays 60), 58 wrong (still below 60).
+  const g = scoringState([60, 55, 58]);
+  assert.deepEqual(wrongOnBoard(g).map((c) => c.id), [2, 3]);
+  const out = resolveCheckpoint(g, { p1: 2, p2: 1 });
+  assert.equal(out.lastCheckpoint.truth, 2);
+  assert.deepEqual(out.lastCheckpoint.wrongIds, [2, 3]);
+});
+
+test('the walk differs from judging each card when it was placed', () => {
+  // Placed in order: 60 at the tip (fits), 55 at the tip (did not fit), then 58 at the tip
+  // — which fitted next to 55 when it was laid. Judged at placement time only one card
+  // was wrong; the walk from the start card compares 58 with 60 and eliminates it too.
+  let g = rigged([city(1, 60), city(2, 55), city(3, 58)]);
   const anchor = g.placements[0].city;
-  const drawn = g.deck.cards[g.deck.pos];
-  const dir = drawn.lat > anchor.lat ? 'S' : 'N'; // guaranteed wrong
-  g = placeCard(g, { dir, index: 0 });             // p1 places wrong (challenge window)
-  g = challenge(g);                                // p2 contras correctly
-  assert.equal(g.players.find((p) => p.id === 'p1').diamonds, 0); // stays at 0, not negative
-  assert.equal(g.players.find((p) => p.id === 'p2').diamonds, 6); // still gains, from the bank
+  const fitsAtPlacement = [];
+  for (let i = 0; i < 3; i++) {
+    const card = g.deck.cards[g.deck.pos];
+    fitsAtPlacement.push(isArmInsertCorrect(g.arms.N, anchor, 'N', g.arms.N.length, card));
+    g = passAll(placeCard(g, { dir: 'N', index: g.arms.N.length }));
+  }
+  assert.deepEqual(g.arms.N.map((c) => c.lat), [60, 55, 58]);
+  assert.deepEqual(fitsAtPlacement, [true, false, true]);  // the old count said 1 wrong
+  assert.deepEqual(wrongOnBoard(g).map((c) => c.id), [2, 3]);
 });
 
-test('pickPool keeps only the most populous cities', () => {
-  const cs = [
-    { id: 1, pop: 100 }, { id: 2, pop: 900 }, { id: 3, pop: 500 }, { id: 4, pop: 300 },
-  ];
-  assert.deepEqual(pickPool(cs, 2).map((c) => c.id), [2, 3]);   // top 2 by population
-  assert.equal(pickPool(cs, Infinity).length, 4);              // legendar keeps everything
+test('resolveCheckpoint: exact guessers get +2 from the bank', () => {
+  const g = scoringState([50, 40],
+    [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }, { id: 'p3', name: 'C' }]); // 1 wrong
+  const out = resolveCheckpoint(g, { p1: 1, p2: 1, p3: 0 });
+  assert.equal(out.players.find((p) => p.id === 'p1').diamonds, 6);
+  assert.equal(out.players.find((p) => p.id === 'p2').diamonds, 6);
+  assert.equal(out.players.find((p) => p.id === 'p3').diamonds, 4);
+  assert.equal(out.lastCheckpoint.reward, 2);
+  assert.deepEqual(out.lastCheckpoint.scorerIds, ['p1', 'p2']);
 });
 
-test('isGameOver + winners', () => {
-  const g = { numTurns: 4, cardsPlayed: 4,
-    players: [{ id: 'p1', diamonds: 7 }, { id: 'p2', diamonds: 5 }] };
-  assert.equal(isGameOver(g), true);
-  assert.deepEqual(winners(g).map((p) => p.id), ['p1']);
+test('resolveCheckpoint: nobody exact => closest get +1', () => {
+  const g = scoringState([50, 40, 41]);             // 40 and 41 both below 50: 2 wrong
+  const out = resolveCheckpoint(g, { p1: 1, p2: 4 }); // |1-2|=1, |4-2|=2 => p1 closest
+  assert.equal(out.players.find((p) => p.id === 'p1').diamonds, 5);
+  assert.equal(out.players.find((p) => p.id === 'p2').diamonds, 4);
+});
+
+test('cards knocked off by a contra are not on the board, so they are not counted', () => {
+  let g = rigged([city(1, 40), city(2, 50)]);
+  g = continueAfterContra(challenge(placeCard(g, { dir: 'N', index: 0 }))); // 40 removed
+  g = passAll(placeCard(g, { dir: 'N', index: 0 }));
+  assert.equal(g.removed.length, 1);
+  assert.equal(wrongOnBoard(g).length, 0);
+});
+
+test('resolveCheckpoint moves to the reveal phase', () => {
+  const out = resolveCheckpoint(scoringState([50, 40]), { p1: 1, p2: 0 });
+  assert.equal(out.phase, 'checkpoint_reveal');
+  assert.equal(out.lastCheckpoint.truth, 1);
+  assert.deepEqual(out.lastCheckpoint.scorerNames, ['A']);
+  assert.equal(out.lastCheckpoint.final, false);
 });
 
 test('checkpoint does not re-trigger after being resolved', () => {
-  const base = {
-    variant: 'cardinal',
-    players: [{ id: 'p1', diamonds: 5 }, { id: 'p2', diamonds: 5 }],
-    placements: [{ dir: null, isCorrect: true }, { dir: 'N', isCorrect: false }],
-    cardsPlayed: 15,
-    checkpointEvery: 15,
-    lastCheckpointAt: 0,
-  };
-  assert.equal(needsCheckpoint(base), true);           // 15th card -> checkpoint due
+  const base = scoringState([50, 40]);
+  assert.equal(needsCheckpoint(base), true);
   const after = resolveCheckpoint(base, { p1: 1, p2: 0 });
   assert.equal(after.lastCheckpointAt, 15);
-  assert.equal(needsCheckpoint(after), false);         // resolved -> no re-trigger at 15
-  assert.equal(needsCheckpoint({ ...after, cardsPlayed: 30 }), true); // next one at 30
+  assert.equal(needsCheckpoint(after), false);
+  assert.equal(needsCheckpoint({ ...after, cardsPlayed: 30 }), true);
+});
+
+test('continueAfterCheckpoint clears everything and lays a set-aside start card', () => {
+  let g = playRound(newGame());
+  g = resolveCheckpoint(g, { p1: 0, p2: 0 });
+  const turn = g.currentPlayerIndex;
+  const deckPos = g.deck.pos;
+  const out = continueAfterCheckpoint(g);
+  assert.equal(out.phase, 'placing');
+  assert.equal(out.round, 2);
+  assert.equal(out.placements.length, 1);
+  assert.equal(out.placements[0].city.id, g.startCards[1].id); // the second set-aside card
+  assert.deepEqual(out.arms, { N: [], S: [], E: [], V: [] });
+  assert.equal(out.removed.length, 0);
+  assert.equal(out.lastCheckpoint, null);
+  assert.equal(out.deck.pos, deckPos);               // nothing taken from the draw pile
+  assert.equal(out.currentPlayerIndex, turn);        // whoever's turn it is plays on
+});
+
+test('three rounds, each ending with a scoring; the third one ends the game', () => {
+  let g = newGame();
+  for (let round = 1; round <= 3; round++) {
+    g = playRound(g);
+    assert.equal(g.round, round);
+    assert.equal(g.cardsPlayed, round * 15);
+    assert.equal(isGameOver(g), false);              // the scoring comes first
+    g = resolveCheckpoint(g, { p1: 0, p2: 0 });
+    assert.equal(g.lastCheckpoint.final, round === 3);
+    g = continueAfterCheckpoint(g);
+  }
+  assert.equal(isGameOver(g), true);
+  assert.equal(g.deck.pos, 45);                      // the whole pile was played
+});
+
+test('a short draw pile ends the round (and the game) with a final scoring', () => {
+  let g = createGame({ variant: 'cardinal', seed: 5, players: twoPlayers, cards: makeCities(23) });
+  assert.equal(g.deck.cards.length, 20);             // 23 - 3 start cards
+  g = playRound(g);                                  // 15
+  g = continueAfterCheckpoint(resolveCheckpoint(g, { p1: 0, p2: 0 }));
+  g = playRound(g);                                  // the last 5
+  assert.equal(g.cardsPlayed, 20);
+  g = resolveCheckpoint(g, { p1: 0, p2: 0 });
+  assert.equal(g.lastCheckpoint.final, true);
+  assert.equal(isGameOver(continueAfterCheckpoint(g)), true);
+});
+
+test('winners: most diamonds', () => {
+  const g = { players: [{ id: 'p1', diamonds: 7 }, { id: 'p2', diamonds: 5 }, { id: 'p3', diamonds: 7 }] };
+  assert.deepEqual(winners(g).map((p) => p.id), ['p1', 'p3']);
 });
