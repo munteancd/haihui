@@ -3,6 +3,27 @@ import { placeCard, challenge, contestOptions, passChallenge, continueAfterContr
          isLastRound, isGameOver, winners } from './game-state.js';
 import { isBot, botEstimate } from './bot.js';
 import { formatLat, formatLon, formatPop } from './geo-format.js';
+import { LOGO } from './logo.js';
+import { avatar } from './avatar.js';
+
+// World cards carry an ISO country code; show it as a Romanian country name ("EG" → "Egipt")
+// so a name like "Alexandria" isn't ambiguous.
+const regionNames = typeof Intl.DisplayNames === 'function' ? new Intl.DisplayNames(['ro'], { type: 'region' }) : null;
+// Shorter forms for names too long for a card.
+const SHORT_COUNTRY = { US: 'SUA', GB: 'Marea Britanie', AE: 'Emiratele Arabe', CD: 'RD Congo',
+  CG: 'Congo', CF: 'Rep. Centrafricană', DO: 'Rep. Dominicană', BA: 'Bosnia', KR: 'Coreea de Sud',
+  KP: 'Coreea de Nord', HK: 'Hong Kong', MO: 'Macao', PS: 'Palestina' };
+const countryName = (cc) => {
+  if (SHORT_COUNTRY[cc]) return SHORT_COUNTRY[cc];
+  try { return regionNames?.of(cc) ?? cc; } catch { return cc; }
+};
+
+const ARM_TAGS = {
+  N: ['N', 'Nord: spre capăt, latitudinea crește'],
+  S: ['S', 'Sud: spre capăt, latitudinea scade'],
+  E: ['E', 'Est: spre capăt, longitudinea crește'],
+  V: ['V', 'Vest: spre capăt, longitudinea scade'],
+};
 
 // Controlled board: renders a shared game `state` and only enables controls when it is
 // THIS device's turn (state.players[currentPlayerIndex].id === myId). Every local action
@@ -54,6 +75,9 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
   // coordinate that matters on that arm.
   function cardEl(city, { revealed = false, faded = false, anchor = false, draggable = false, wrong = false, last = false, axis = null, id = '' } = {}) {
     const attraction = city.kind === 'attraction';
+    const cn = city.country ? countryName(city.country) : '';
+    const country = cn === city.name ? '' : cn; // no "Singapore / Singapore"
+    const region = city.county || country;
     const data = current.variant === 'cardinal'
       ? `<span class="coord${axis === 'lon' ? ' dim' : ''}">↑ ${formatLat(city.lat)}</span>
          <span class="coord${axis === 'lat' ? ' dim' : ''}">→ ${formatLon(city.lon)}</span>`
@@ -69,8 +93,8 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     if (animFlipIds.includes(city.id)) cls.push('flip-anim');
     if (city.id === animPlaceId) cls.push('place-anim');
     return `<div class="${cls.join(' ')}" data-id="${city.id}"${id ? ` id="${id}"` : ''}><div class="card-inner">
-      <div class="card-face">${attraction ? '<span class="kind" title="Obiectiv turistic">★</span>' : ''}<span class="cname">${city.name}</span></div>
-      <div class="card-back"><span class="bname">${city.name}</span>${city.county ? `<span class="county">${city.county}</span>` : ''}${data}</div></div></div>`;
+      <div class="card-face">${attraction ? '<span class="kind" title="Obiectiv turistic">★</span>' : ''}<span class="cname">${city.name}</span>${country ? `<span class="ccountry">${country}</span>` : ''}</div>
+      <div class="card-back"><span class="bname">${city.name}</span>${region ? `<span class="county">${region}</span>` : ''}${data}</div></div></div>`;
   }
 
   // A drop target. `dir` is '' for population. Carries where a placed card would go.
@@ -85,17 +109,24 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     if (anchor) board.scrollLeft = anchor.offsetLeft - (board.clientWidth - anchor.offsetWidth) / 2;
   }
 
+  // Brand + round progress, then one chip per player (diamonds, whose turn it is, which is you).
   function header({ turn = true } = {}) {
-    const cur = current.players[current.currentPlayerIndex];
-    const you = current.players.find((p) => p.id === myId);
-    const scores = current.players.map((p) =>
-      `<span class="pscore" data-p="${p.id}">${p.name}: <span class="dcount">${'💎'.repeat(Math.max(0, p.diamonds))} ${p.diamonds}</span></span>`)
-      .join(' · ');
+    const curId = current.players[current.currentPlayerIndex].id;
+    const chips = current.players.map((p) => `
+      <span class="pchip pscore${turn && p.id === curId ? ' turn' : ''}" data-p="${p.id}">
+        ${avatar(p.name, p.id)}<span>${p.name}${p.id === myId && p.name !== 'Tu' ? ' <span class="you">(tu)</span>' : ''}</span>
+        <span class="dcount">💎 ${p.diamonds}</span>${turn && p.id === curId ? '<span class="tag">la rând</span>' : ''}
+      </span>`).join('');
     const placed = Math.min(cardsThisRound(current), current.roundSize);
     return `
-      <p class="diamonds">${scores}</p>
-      <p class="round">Runda <b>${current.round}</b> din ${current.numRounds} · cărți puse: <b>${placed}</b>/${current.roundSize}</p>
-      ${turn ? `<p>La rând: <b>${cur.name}</b>${you ? ` — tu ești <b>${you.name}</b>` : ''}</p>` : ''}`;
+      <header class="topbar">
+        <div class="brand-mini">${LOGO}<span>Haihui</span></div>
+        <div class="round-box">
+          <p class="round">Runda <b>${current.round}</b> din ${current.numRounds} · cărți puse: <b>${placed}</b>/${current.roundSize}</p>
+          <div class="progress"><span style="width:${(100 * placed) / current.roundSize}%"></span></div>
+        </div>
+      </header>
+      <div class="players">${chips}</div>`;
   }
 
   // Animate a diamond flying from the loser's score to the winner's, then pulse the winner.
@@ -127,10 +158,10 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     const card = drawnCard();
     if (!card) return '';
     if (myTurn()) {
-      return `<div class="draw-banner"><span>Trage cartea pe locul potrivit (sau apasă un loc):</span>
-        ${cardEl(card, { id: 'draw-card', draggable: true })}</div>`;
+      return `<div class="draw-banner mine">${cardEl(card, { id: 'draw-card', draggable: true })}
+        <span>E rândul tău: trage cartea pe un loc liber <span class="hint">(sau apasă direct pe un ＋)</span></span></div>`;
     }
-    return `<div class="draw-banner"><span>Carte la rând:</span>${cardEl(card)}</div>`;
+    return `<div class="draw-banner">${cardEl(card)}<span>Cartea pe care o pune acum <b>${current.players[current.currentPlayerIndex].name}</b></span></div>`;
   }
 
   // Shared per-card options for a card on the board.
@@ -178,12 +209,15 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
         <div class="pop-label">↓ mai puțini locuitori</div></div>${removedHtml()}`;
     }
 
+    // Each arm ends in its compass letter: first in DOM order for N and V (they grow up and
+    // left), last for E and S.
+    const tag = (dir) => `<span class="arm-tag" title="${ARM_TAGS[dir][1]}">${ARM_TAGS[dir][0]}</span>`;
     return `<div class="plus">
-      <div class="arm arm-n">${armSeq('N', true, revealAll, zones)}</div>
-      <div class="arm arm-v">${armSeq('V', true, revealAll, zones)}</div>
+      <div class="arm arm-n">${tag('N')}${armSeq('N', true, revealAll, zones)}</div>
+      <div class="arm arm-v">${tag('V')}${armSeq('V', true, revealAll, zones)}</div>
       <div class="anchor">${cardEl(anchor, anchorOpts)}</div>
-      <div class="arm arm-e">${armSeq('E', false, revealAll, zones)}</div>
-      <div class="arm arm-s">${armSeq('S', false, revealAll, zones)}</div>
+      <div class="arm arm-e">${armSeq('E', false, revealAll, zones)}${tag('E')}</div>
+      <div class="arm arm-s">${armSeq('S', false, revealAll, zones)}${tag('S')}</div>
     </div>${removedHtml()}`;
   }
 
@@ -276,7 +310,7 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     }
     if (!myTurn()) {
       root.querySelector('#controls').innerHTML =
-        `<p>Așteaptă pe <b>${current.players[current.currentPlayerIndex].name}</b>…</p>`;
+        `<p class="waiting-turn">Așteaptă pe <b>${current.players[current.currentPlayerIndex].name}</b>…</p>`;
       return;
     }
     renderChallengeControls();
@@ -309,10 +343,11 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
       revealed: true, axis, wrong: c.id === r.card.id && r.contraCorrect, last: c.id === r.card.id,
     })}<figcaption>${c.id === r.card.id ? 'pusă acum' : 'vecina'}</figcaption></figure>`).join('');
     root.innerHTML = `${header()}<div id="board">${boardHtml()}</div>
-      <div class="result">
+      <div class="result ${r.contraCorrect ? 'good' : 'bad'}">
         <div class="pair pair-${r.dir || 'pop'}">${pairHtml}</div>
+        <div class="result-text"><p>${msg}</p>
         <p class="hint">${orderHint(r.dir)} Valori egale = corect. Celelalte cărți nu contează.</p>
-        <p>${msg}</p><button id="cont">Continuă</button></div>`;
+        <button id="cont">Continuă</button></div></div>`;
     root.querySelector('#cont').onclick = () => commit(continueAfterContra(current));
     // Fly a diamond from the loser to the winner, then pulse the winner's score.
     const winnerIdx = r.contraCorrect ? r.challengerIndex : r.placerIndex;
@@ -358,18 +393,19 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     // automatic (pre-filled) guess so a human need only enter the human guesses.
     const board = `<div id="board">${boardHtml(false)}</div>`;
     if (!iDriveCheckpoint()) {
-      root.innerHTML = `${header()}${board}<p>${scoringTitle()}: se ghicește…</p>`;
+      root.innerHTML = `${header()}${board}<div class="result"><p class="waiting-turn">${scoringTitle()}: se ghicește…</p></div>`;
       return;
     }
-    root.innerHTML = `${header()}${board}
+    root.innerHTML = `${header()}${board}<div class="result">
       <h3>${scoringTitle()} — câte cărți sunt greșite pe masă?</h3>
       <p class="hint">Ghicește fără să întorci cărțile. Nimeresc exact → +2 💎; dacă nimeni nu nimerește, cel mai aproape → +1 💎.</p>
+      <div class="score-form">
       ${current.players.map((p) => {
         const bot = isBot(p);
         return `<label>${p.name}${bot ? ' 🤖' : ''} <input data-p="${p.id}" type="number" min="0"
           value="${bot ? botEstimate(current) : 0}"${bot ? ' disabled' : ''} /></label>`;
       }).join('')}
-      <button id="score">Punctează</button>`;
+      <button id="score">Punctează</button></div></div>`;
     root.querySelector('#score').onclick = () => {
       const est = {};
       root.querySelectorAll('input[data-p]').forEach((i) => { est[i.dataset.p] = Number(i.value); });
@@ -409,9 +445,10 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
 
   function renderGameOver() {
     const w = winners(current).map((p) => p.name).join(', ');
+    const medals = ['🥇', '🥈', '🥉'];
     const standings = [...current.players].sort((a, b) => b.diamonds - a.diamonds)
-      .map((p) => `<li>${p.name}: ${p.diamonds} 💎</li>`).join('');
-    root.innerHTML = `${header({ turn: false })}<h2>Gata! Câștigă: ${w} 🏆</h2><ol class="standings">${standings}</ol>
+      .map((p, i) => `<li>${medals[i] ?? `${i + 1}.`} ${p.name}: ${p.diamonds} 💎</li>`).join('');
+    root.innerHTML = `${header({ turn: false })}<section class="gameover"><h2>Gata! Câștigă: ${w} 🏆</h2><ol class="standings">${standings}</ol></section>
       <div id="board">${boardHtml(true)}</div><button id="menu">Meniu</button>`;
     root.querySelector('#menu').onclick = () => location.reload();
   }

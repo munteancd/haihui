@@ -1,6 +1,8 @@
 import { createRoom, joinRoom } from './realtime-sync.js';
 import { DECKS, DEFAULT_DECK } from './decks.js';
 import { DEFAULT_ROUNDS } from './game-state.js';
+import { LOGO } from './logo.js';
+import { avatar } from './avatar.js';
 
 const VARIANTS = `<option value="cardinal">Puncte cardinale</option><option value="population">Populație</option>`;
 const DECK_OPTIONS = Object.entries(DECKS).map(([id, d]) =>
@@ -32,34 +34,47 @@ const HOW_TO = `
 // starts a local game against bots (no other players needed).
 export function renderLobby(root, { onEnter, onSolo }) {
   root.innerHTML = `
-    <h1>Haihui</h1>
-    <button id="howto-btn" class="ghost">Cum se joacă</button>
-    <section id="howto" hidden>${HOW_TO}</section>
-    <section>
-      <h2>Cameră nouă</h2>
-      <label>Variantă <select id="variant">${VARIANTS}</select></label>
-      <label>Pachet <select id="deck">${DECK_OPTIONS}</select></label>
-      <label>Dificultate <select id="difficulty">${DIFFICULTIES}</select></label>
-      <label>Runde <input id="rounds" type="number" value="${DEFAULT_ROUNDS}" min="1" max="5" /></label>
-      <label>Nume <input id="host-name" placeholder="Cristi" /></label>
-      <button id="create">Creează</button>
-    </section>
-    <section>
-      <h2>Intră cu cod</h2>
-      <input id="code" placeholder="COD" />
-      <input id="join-name" placeholder="Nume" />
-      <button id="join">Intră</button>
-    </section>
-    <section>
-      <h2>Solo cu boți</h2>
-      <p class="hint">Testează singur, fără să aștepți pe nimeni.</p>
-      <label>Variantă <select id="solo-variant">${VARIANTS}</select></label>
-      <label>Pachet <select id="solo-deck">${DECK_OPTIONS}</select></label>
-      <label>Dificultate <select id="solo-difficulty">${DIFFICULTIES}</select></label>
-      <label>Boți <input id="solo-bots" type="number" value="2" min="1" max="5" /></label>
-      <label>Runde <input id="solo-rounds" type="number" value="${DEFAULT_ROUNDS}" min="1" max="5" /></label>
-      <button id="solo">Începe</button>
-    </section>
+    <header class="hero">
+      ${LOGO}
+      <div><h1>Haihui</h1><p class="tagline">Pune orașele la locul lor pe hartă.</p></div>
+      <button id="howto-btn" class="ghost">📖 Cum se joacă</button>
+    </header>
+    <section id="howto" class="panel" hidden>${HOW_TO}</section>
+    <div class="lobby-grid">
+      <section class="panel">
+        <h2><span class="ico">🏠</span>Cameră nouă</h2>
+        <p class="hint">Joci cu prietenii: le dai codul camerei.</p>
+        <div class="fields">
+          <label>Variantă <select id="variant">${VARIANTS}</select></label>
+          <label>Pachet <select id="deck">${DECK_OPTIONS}</select></label>
+          <label>Dificultate <select id="difficulty">${DIFFICULTIES}</select></label>
+          <label>Runde <input id="rounds" type="number" value="${DEFAULT_ROUNDS}" min="1" max="5" /></label>
+          <label class="full">Numele tău <input id="host-name" placeholder="Cristi" /></label>
+        </div>
+        <button id="create" class="wide">Creează camera</button>
+      </section>
+      <section class="panel">
+        <h2><span class="ico">🔑</span>Intră cu cod</h2>
+        <p class="hint">Ai primit un cod de 4 caractere? Scrie-l aici.</p>
+        <div class="fields">
+          <label class="full">Cod <input id="code" placeholder="ABCD" autocapitalize="characters" /></label>
+          <label class="full">Numele tău <input id="join-name" placeholder="Nume" /></label>
+        </div>
+        <button id="join" class="wide">Intră</button>
+      </section>
+      <section class="panel">
+        <h2><span class="ico">🤖</span>Solo cu boți</h2>
+        <p class="hint">Joci singur, fără să aștepți pe nimeni.</p>
+        <div class="fields">
+          <label>Variantă <select id="solo-variant">${VARIANTS}</select></label>
+          <label>Pachet <select id="solo-deck">${DECK_OPTIONS}</select></label>
+          <label>Dificultate <select id="solo-difficulty">${DIFFICULTIES}</select></label>
+          <label>Boți <input id="solo-bots" type="number" value="2" min="1" max="5" /></label>
+          <label>Runde <input id="solo-rounds" type="number" value="${DEFAULT_ROUNDS}" min="1" max="5" /></label>
+        </div>
+        <button id="solo" class="wide">Începe</button>
+      </section>
+    </div>
     <pre id="lobby-state"></pre>`;
 
   const showError = (e) => { root.querySelector('#lobby-state').textContent = `Eroare: ${e?.message || e}`; };
@@ -116,19 +131,21 @@ export function renderLobby(root, { onEnter, onSolo }) {
 export function renderWaiting(root, { room, me, players, isHost, deck, onStart }) {
   const deckInfo = deck ? ` · pachet <b>${DECKS[deck].label}</b>` : '';
   root.innerHTML = `
-    <h1>Cameră ${room.code}</h1>
-    <p>Variantă: <b>${room.variant === 'cardinal' ? 'Puncte cardinale' : 'Populație'}</b> · ${room.num_turns} ${room.num_turns === 1 ? 'rundă' : 'runde'}${deckInfo}</p>
-    <p>Tu ești <b>${me.name}</b>.</p>
-    <h3>Jucători</h3>
-    <ul>${players.map((p) => `<li>${p.name}${p.seat_order === 0 ? ' (gazdă)' : ''}</li>`).join('')}</ul>
-    <div id="wait-controls"></div>`;
+    <section class="panel waiting">
+      <h1>Cameră <span class="room-code">${room.code}</span></h1>
+      <p class="hint">Dă-le prietenilor codul ăsta: ei aleg „Intră cu cod”.</p>
+      <p>Variantă: <b>${room.variant === 'cardinal' ? 'Puncte cardinale' : 'Populație'}</b> · ${room.num_turns} ${room.num_turns === 1 ? 'rundă' : 'runde'}${deckInfo}</p>
+      <h3>Jucători</h3>
+      <div class="players">${players.map((p) => `<span class="pchip">${avatar(p.name, p.id)}${p.name}${p.seat_order === 0 ? ' <span class="you">gazdă</span>' : ''}${p.id === me.id ? ' <span class="tag">tu</span>' : ''}</span>`).join('')}</div>
+      <div id="wait-controls"></div>
+    </section>`;
   const c = root.querySelector('#wait-controls');
   if (isHost) {
     const canStart = players.length >= 2;
     c.innerHTML = `<button id="start" ${canStart ? '' : 'disabled'}>Start joc</button>
-      ${canStart ? '' : '<p>Așteaptă cel puțin un jucător…</p>'}`;
+      ${canStart ? '' : '<p class="hint waiting-turn">Așteaptă cel puțin un jucător…</p>'}`;
     if (canStart) root.querySelector('#start').onclick = onStart;
   } else {
-    c.innerHTML = `<p>Așteaptă ca gazda să pornească jocul…</p>`;
+    c.innerHTML = `<p class="waiting-turn">Așteaptă ca gazda să pornească jocul…</p>`;
   }
 }

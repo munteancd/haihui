@@ -70,6 +70,8 @@ Where things live:
 - `src/board-ui.js`, `src/lobby-ui.js` — the screens; `src/main.js` wires solo and rooms.
 - `src/bot.js` — the solo bots; `src/realtime-sync.js` — Supabase rooms.
 - `src/decks.js` — deck choice; `data/` — the card data, built by `tools/`.
+- `css/style.css` — the look: colour tokens at the top (light, plus a dark-mode block),
+  then components; `src/logo.js` / `icon.svg` — the compass logo.
 
 ## Deploy
 GitHub Pages from `master`, repo root: a push to `master` is live within a minute or two
