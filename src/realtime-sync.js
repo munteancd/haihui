@@ -56,11 +56,14 @@ export async function saveState(roomId, state) {
   if (error) throw error;
 }
 
+// Calls onChange on every change to the room or its players, and once more each time the
+// channel (re)subscribes: changes made before it was listening (a quick join) or while the
+// connection was down (a sleeping phone) are never delivered as events.
 export function subscribeRoom(roomId, onChange) {
   return supabase.channel(`room-${roomId}`)
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` }, onChange)
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, onChange)
-    .subscribe();
+    .subscribe((status) => { if (status === 'SUBSCRIBED') onChange(); });
 }
