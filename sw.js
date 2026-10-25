@@ -1,5 +1,5 @@
-const CACHE = 'haihui-v14';
-const ASSETS = ['./', './index.html', './css/style.css', './src/main.js'];
+const CACHE = 'haihui-v15';
+const ASSETS = ['./', './index.html', './css/style.css', './src/main.js', './data/romania.json'];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

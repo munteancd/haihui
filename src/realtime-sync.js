@@ -7,11 +7,13 @@ export function makeCode(len = 4) {
   return s;
 }
 
-export async function createRoom({ variant, numTurns }) {
+// The `num_turns` column predates rounds; it now stores the number of rounds (no schema
+// change needed).
+export async function createRoom({ variant, numRounds }) {
   const code = makeCode();
   const deck_seed = Math.floor(Math.random() * 2 ** 31);
   const { data, error } = await supabase.from('rooms')
-    .insert({ code, variant, num_turns: numTurns, deck_seed }).select().single();
+    .insert({ code, variant, num_turns: numRounds, deck_seed }).select().single();
   if (error) throw error;
   return data;
 }

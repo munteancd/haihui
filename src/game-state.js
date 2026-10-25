@@ -1,60 +1,64 @@
-import { buildDeck, draw } from './deck.js';
-import { isArmInsertCorrect, countWrong } from './rules-cardinal.js';
-import { isInsertCorrect, countWrongPopulation } from './rules-population.js';
+import { shuffle, draw } from './deck.js';
+import { armNeighbours, isContestedPairCorrect as isArmPairCorrect, wrongCards } from './rules-cardinal.js';
+import { lineNeighbours, isContestedPairCorrect as isLinePairCorrect, wrongCardsPopulation } from './rules-population.js';
 
-const START_DIAMONDS = 5;
-const CHECKPOINT_EVERY = 15;
+export const START_DIAMONDS = 4;
+export const ROUND_SIZE = 15;      // cards placed per round (the start card not counted)
+export const DEFAULT_ROUNDS = 3;
 
-// Difficulty = how many cities are in play, kept to the most populous (best-known) ones.
-// Easier tiers use a small, famous pool; Legendar uses everything.
-export const DIFFICULTY = { usor: 200, mediu: 800, greu: 2000, legendar: Infinity };
-
-// The pool of cities a difficulty draws from: the top `poolSize` by population.
-export function pickPool(cities, poolSize) {
-  if (poolSize === Infinity || cities.length <= poolSize) return cities.slice();
-  return [...cities].sort((a, b) => b.pop - a.pop).slice(0, poolSize);
+// Shuffle the pool and split it into the set-aside start cards (one per round) and the
+// draw pile (ROUND_SIZE cards per round). Start cards never come out of the draw pile.
+export function dealDeck(pool, numRounds, seed) {
+  const shuffled = shuffle(pool, seed);
+  return {
+    startCards: shuffled.slice(0, numRounds),
+    cards: shuffled.slice(numRounds, numRounds + numRounds * ROUND_SIZE),
+  };
 }
 
-// Build a fresh game. The anchor (first card) is laid automatically and is always
-// "correct" since there is nothing to compare it to.
-export function createGame({ variant, numTurns, seed, players, cities, difficulty = 'legendar' }) {
-  const pool = pickPool(cities, DIFFICULTY[difficulty] ?? Infinity);
-  const deckSize = Math.min(numTurns, pool.length);
-  const deckState = { cards: buildDeck(pool, deckSize, seed), pos: 0 };
-  const { card: anchor, next } = draw(deckState);
+// An empty board around a start card. The start card is laid automatically and is never
+// judged itself: it is the reference everything else is compared to.
+function freshBoard(variant, anchor) {
+  return {
+    placements: [variant === 'cardinal'
+      ? { playerId: null, city: anchor, dir: null, index: null }
+      : { playerId: null, city: anchor, index: null }],
+    line: variant === 'population' ? [anchor] : undefined,             // ordered bottom → top
+    arms: variant === 'cardinal' ? { N: [], S: [], E: [], V: [] } : undefined, // the + arms
+    removed: [],               // cards knocked off the board by a successful contra
+  };
+}
 
-  const anchorPlacement =
-    variant === 'cardinal'
-      ? { playerId: null, city: anchor, dir: null, index: null, isCorrect: true, revealed: false }
-      : { playerId: null, city: anchor, index: 0, isCorrect: true, revealed: false };
-
+// Build a fresh game from `cards` (the deck's pool for this variant).
+export function createGame({ variant, numRounds = DEFAULT_ROUNDS, seed, players, cards, deckId = null, difficulty = null }) {
+  const { startCards, cards: pile } = dealDeck(cards, numRounds, seed);
   return {
     variant,
-    numTurns,
+    numRounds,
+    roundSize: ROUND_SIZE,
     seed,
+    deckId,
     difficulty,
     players: players.map((p) => ({ ...p, diamonds: START_DIAMONDS })),
     currentPlayerIndex: 0,
-    deck: next,
-    placements: [anchorPlacement],
-    line: variant === 'population' ? [anchor] : undefined,   // ordered cities for population
-    arms: variant === 'cardinal' ? { N: [], S: [], E: [], V: [] } : undefined, // four arms of the +
-    removed: [],               // cards knocked off the board by a successful contra
+    deck: { cards: pile, pos: 0 },
+    startCards,
+    round: 1,
+    ...freshBoard(variant, startCards[0]),
     lastMove: null,            // { placementIndex, placerIndex } open to challenge
-    cardsPlayed: 1,
-    // 'placing' | 'challenge_window' | 'contra_result' | 'checkpoint_reveal'
-    // (the checkpoint GUESS step is 'placing' + needsCheckpoint(); the reveal is its own phase)
+    lastResult: null,          // outcome of the last contra, for its result screen
+    cardsPlayed: 0,            // cards placed from the draw pile so far (start cards excluded)
+    // 'placing' | 'challenge_window' | 'contra_result' | 'checkpoint_reveal' | 'game_over'
+    // (the scoring GUESS step is 'placing' + needsCheckpoint(); the reveal is its own phase)
     phase: 'placing',
-    checkpointEvery: CHECKPOINT_EVERY,
-    checkpointEstimates: {},   // playerId -> guessed wrong-count during a checkpoint
-    lastCheckpointAt: 0,       // cardsPlayed value of the last resolved checkpoint
-    lastCheckpoint: null,      // result of the last checkpoint, for its reveal screen
+    lastCheckpointAt: 0,       // cardsPlayed value of the last resolved scoring
+    lastCheckpoint: null,      // result of the last scoring, for its reveal screen
   };
 }
 
 // The current player lays the drawn card. `move` is { dir, index } for cardinal
-// (which arm, and where along it) or { index } for population. Correctness is computed
-// but stays hidden until the card is revealed by a contra or checkpoint.
+// (which arm, and where along it) or { index } for population. Nothing is judged now:
+// a contra or the next scoring decides whether it was right.
 export function placeCard(state, move) {
   const { card, next } = draw(state.deck);
   const placerIndex = state.currentPlayerIndex;
@@ -63,20 +67,15 @@ export function placeCard(state, move) {
   let placement;
   let line = state.line;
   let arms = state.arms;
-
   if (state.variant === 'cardinal') {
-    const anchorCity = state.placements[0].city;
-    const arm = state.arms[move.dir];
-    const isCorrect = isArmInsertCorrect(arm, anchorCity, move.dir, move.index, card);
-    const newArm = arm.slice();
-    newArm.splice(move.index, 0, card);
-    arms = { ...state.arms, [move.dir]: newArm };
-    placement = { playerId: placerId, city: card, dir: move.dir, index: move.index, isCorrect, revealed: false };
+    const arm = state.arms[move.dir].slice();
+    arm.splice(move.index, 0, card);
+    arms = { ...state.arms, [move.dir]: arm };
+    placement = { playerId: placerId, city: card, dir: move.dir, index: move.index };
   } else {
-    const isCorrect = isInsertCorrect(state.line, move.index, card);
-    placement = { playerId: placerId, city: card, index: move.index, isCorrect, revealed: false };
     line = state.line.slice();
     line.splice(move.index, 0, card);
+    placement = { playerId: placerId, city: card, index: move.index };
   }
 
   return {
@@ -88,7 +87,7 @@ export function placeCard(state, move) {
     cardsPlayed: state.cardsPlayed + 1,
     phase: 'challenge_window',
     lastMove: { placementIndex: state.placements.length, placerIndex },
-    // challenge window opens for the player to the RIGHT of the placer first
+    // the next player in turn order gets the first chance to contest
     currentPlayerIndex: (placerIndex + 1) % state.players.length,
   };
 }
@@ -104,38 +103,41 @@ function moveDiamond(players, fromIndex, toIndex) {
   });
 }
 
-// After a challenge resolves (or is fully passed), the placer's neighbor takes the
-// next turn and the challenge window closes.
-function closeWindow(state, extra = {}) {
-  const nextPlacer = (state.lastMove.placerIndex + 1) % state.players.length;
-  return {
-    ...state, phase: 'placing', lastMove: null, currentPlayerIndex: nextPlacer, ...extra,
-  };
+// The neighbours a contest can flip together with the last placed card: just one at a
+// tip, two when the card went between two others (then the contester picks). Each is
+// { side: 'prev' | 'next', city } — 'prev' is toward the start card (cardinal) or below
+// (population), 'next' is outward or above.
+export function contestOptions(state) {
+  const p = state.placements[state.lastMove.placementIndex];
+  return state.variant === 'cardinal'
+    ? armNeighbours(state.arms[p.dir], state.placements[0].city, p.index)
+    : lineNeighbours(state.line, p.index);
 }
 
-// The current eligible player challenges the last placement. Either way the card is
-// revealed (its data is turned face-up). A correct contra (the placement was wrong)
-// also knocks that card off the board into the removed pile.
-export function challenge(state) {
+// The current eligible player contests the last placement against ONE neighbour (`side`;
+// defaults to the only/first one). Only that pair is checked. A correct contra (the pair
+// is out of order) knocks the card off the board; either way both cards are shown on the
+// result screen.
+export function challenge(state, side) {
+  const options = contestOptions(state);
+  const pick = options.find((o) => o.side === side) ?? options[0];
   const challengerIndex = state.currentPlayerIndex;
   const placerIndex = state.lastMove.placerIndex;
   const idx = state.lastMove.placementIndex;
   const placement = state.placements[idx];
-  const contraCorrect = !placement.isCorrect;
+  const pairCorrect = state.variant === 'cardinal'
+    ? isArmPairCorrect(placement.city, pick.city, pick.side, placement.dir)
+    : isLinePairCorrect(placement.city, pick.city, pick.side);
+  const contraCorrect = !pairCorrect;
 
   // correct contra: challenger takes from placer; wrong contra: challenger gives to placer
   const players = contraCorrect
     ? moveDiamond(state.players, placerIndex, challengerIndex)
     : moveDiamond(state.players, challengerIndex, placerIndex);
 
-  // Reveal the challenged card so everyone can verify it on the result screen.
-  const placements = state.placements.map((p, i) =>
-    i === idx ? { ...p, revealed: true, removed: contraCorrect } : p);
-
-  let line = state.line;
-  let arms = state.arms;
-  let removed = state.removed;
+  let { placements, line, arms, removed } = state;
   if (contraCorrect) {
+    placements = state.placements.map((p, i) => (i === idx ? { ...p, removed: true } : p));
     removed = [...state.removed, placement.city];
     if (state.variant === 'cardinal') {
       const arm = state.arms[placement.dir].slice();
@@ -148,12 +150,13 @@ export function challenge(state) {
   }
 
   // Pause on a result screen (visible to everyone) instead of jumping straight to the next
-  // turn, so the diamond transfer and the reveal are actually seen.
+  // turn, so the two flipped cards and the diamond transfer are actually seen.
   return {
     ...state, players, placements, line, arms, removed,
     phase: 'contra_result',
     lastResult: {
       placementIndex: idx, placerIndex, challengerIndex, contraCorrect,
+      card: placement.city, neighbour: pick.city, side: pick.side, dir: placement.dir ?? null,
       cardName: placement.city.name,
       placerName: state.players[placerIndex].name,
       challengerName: state.players[challengerIndex].name,
@@ -161,15 +164,12 @@ export function challenge(state) {
   };
 }
 
-// Leave the contra result screen. A card that stayed on the board flips back to its name;
-// the next player (to the placer's right) starts placing.
+// Leave the contra result screen: the cards that stayed flip back face-down and the
+// player after the placer starts placing.
 export function continueAfterContra(state) {
-  const r = state.lastResult;
-  const nextPlacer = (r.placerIndex + 1) % state.players.length;
-  const placements = state.placements.map((p, i) =>
-    i === r.placementIndex && !p.removed ? { ...p, revealed: false } : p);
+  const nextPlacer = (state.lastResult.placerIndex + 1) % state.players.length;
   return {
-    ...state, placements, phase: 'placing',
+    ...state, phase: 'placing',
     currentPlayerIndex: nextPlacer, lastMove: null, lastResult: null,
   };
 }
@@ -179,93 +179,106 @@ export function continueAfterContra(state) {
 export function passChallenge(state) {
   const nextEligible = (state.currentPlayerIndex + 1) % state.players.length;
   if (nextEligible === state.lastMove.placerIndex) {
-    return closeWindow(state);
+    return {
+      ...state, phase: 'placing', lastMove: null,
+      currentPlayerIndex: (state.lastMove.placerIndex + 1) % state.players.length,
+    };
   }
   return { ...state, currentPlayerIndex: nextEligible };
 }
 
-function boardWrongCount(state) {
+// The cards the scoring walk eliminates on the current board.
+export function wrongOnBoard(state) {
+  const anchor = state.placements[0].city;
   return state.variant === 'cardinal'
-    ? countWrong(state.placements)
-    : countWrongPopulation(state.placements.slice(1));
+    ? wrongCards(anchor, state.arms)
+    : wrongCardsPopulation(state.line, anchor.id);
 }
 
+function pileEmpty(state) {
+  return state.deck.pos >= state.deck.cards.length;
+}
+
+// The round in play is the last one: its scoring ends the game.
+export function isLastRound(state) {
+  return state.round >= state.numRounds || pileEmpty(state);
+}
+
+// Cards placed so far in the current round.
+export function cardsThisRound(state) {
+  return state.cardsPlayed - (state.round - 1) * state.roundSize;
+}
+
+// A scoring is due once a round's cards are all placed (or the draw pile runs out).
 export function needsCheckpoint(state) {
   return (
     state.cardsPlayed > 0 &&
-    state.cardsPlayed % state.checkpointEvery === 0 &&
-    state.cardsPlayed !== state.lastCheckpointAt // don't re-trigger once resolved
+    state.cardsPlayed !== state.lastCheckpointAt && // don't re-trigger once resolved
+    (state.cardsPlayed % state.roundSize === 0 || pileEmpty(state))
   );
 }
 
-// estimates: { playerId -> guessedWrongCount }. Exact guessers get +2 from bank;
-// if none exact, the closest (by absolute distance) get +1 each. This SCORES the guesses
-// but does not yet reveal the board — it moves to 'checkpoint_reveal', where the cards flip
-// face-up (so the guess is made blind) and the result is shown before the next round starts.
+// estimates: { playerId -> guessedWrongCount }. The truth is how many cards the scoring
+// walk eliminates. Exact guessers get +2 from the bank; if none is exact, the closest (by
+// absolute distance) get +1 each. This SCORES the guesses but does not yet reveal the
+// board — it moves to 'checkpoint_reveal', where the cards flip face-up (so the guess is
+// made blind) and the result is shown.
 export function resolveCheckpoint(state, estimates) {
-  const truth = boardWrongCount(state);
+  const wrong = wrongOnBoard(state);
+  const truth = wrong.length;
   const exact = state.players.filter((p) => estimates[p.id] === truth);
 
-  let players;
   let scorers;
   let reward;
   if (exact.length > 0) {
-    const winnerIds = new Set(exact.map((p) => p.id));
-    players = state.players.map((p) =>
-      winnerIds.has(p.id) ? { ...p, diamonds: p.diamonds + 2 } : p);
     scorers = exact;
     reward = 2;
   } else {
     const dist = (p) => Math.abs(estimates[p.id] - truth);
     const best = Math.min(...state.players.map(dist));
     scorers = state.players.filter((p) => dist(p) === best);
-    const winnerIds = new Set(scorers.map((p) => p.id));
-    players = state.players.map((p) =>
-      winnerIds.has(p.id) ? { ...p, diamonds: p.diamonds + 1 } : p);
     reward = 1;
   }
+  const winnerIds = new Set(scorers.map((p) => p.id));
+  const players = state.players.map((p) =>
+    winnerIds.has(p.id) ? { ...p, diamonds: p.diamonds + reward } : p);
   return {
-    ...state, players, phase: 'checkpoint_reveal', checkpointEstimates: {},
+    ...state, players, phase: 'checkpoint_reveal',
     lastCheckpointAt: state.cardsPlayed,
     lastCheckpoint: {
       truth, reward, exact: exact.length > 0,
       estimates: { ...estimates },
+      wrongIds: wrong.map((c) => c.id),
+      round: state.round,
+      final: isLastRound(state),
       scorerIds: scorers.map((p) => p.id),
       scorerNames: scorers.map((p) => p.name),
     },
   };
 }
 
-// Leave the checkpoint reveal and start a FRESH round: the placed cards are cleared and a
-// brand-new anchor is drawn from the deck (the board never carries over between rounds).
-// Diamonds and the deck position persist; the game ends once the deck/turns run out.
+// Leave the scoring reveal. After the last round's scoring the game is over (the board
+// stays up for the final screen). Otherwise everything is cleared — start card included —
+// a new start card comes from the set-aside ones, and whoever's turn it is plays on.
 export function continueAfterCheckpoint(state) {
-  const { card: anchor, next } = draw(state.deck);
-  if (!anchor) {
-    // Deck exhausted — end the game (draw() shows the winner when cardsPlayed >= numTurns).
-    return { ...state, phase: 'placing', lastCheckpoint: null, cardsPlayed: state.numTurns };
-  }
-  const anchorPlacement =
-    state.variant === 'cardinal'
-      ? { playerId: null, city: anchor, dir: null, index: null, isCorrect: true, revealed: false }
-      : { playerId: null, city: anchor, index: 0, isCorrect: true, revealed: false };
+  if (isLastRound(state)) return { ...state, phase: 'game_over' };
+  let deck = state.deck;
+  let anchor = state.startCards[state.round];
+  if (!anchor) ({ card: anchor, next: deck } = draw(deck)); // tiny pool: borrow from the pile
   return {
     ...state,
-    deck: next,
-    placements: [anchorPlacement],
-    line: state.variant === 'population' ? [anchor] : undefined,
-    arms: state.variant === 'cardinal' ? { N: [], S: [], E: [], V: [] } : undefined,
-    removed: [],
+    deck,
+    round: state.round + 1,
+    ...freshBoard(state.variant, anchor),
     lastMove: null,
     lastResult: null,
     lastCheckpoint: null,
-    cardsPlayed: state.cardsPlayed + 1,
     phase: 'placing',
   };
 }
 
 export function isGameOver(state) {
-  return state.cardsPlayed >= state.numTurns;
+  return state.phase === 'game_over';
 }
 
 export function winners(state) {

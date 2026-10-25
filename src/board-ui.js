@@ -1,29 +1,33 @@
-import { placeCard, challenge, passChallenge, continueAfterContra,
-         needsCheckpoint, resolveCheckpoint, continueAfterCheckpoint,
-         isGameOver, winners } from './game-state.js';
+import { placeCard, challenge, contestOptions, passChallenge, continueAfterContra,
+         needsCheckpoint, resolveCheckpoint, continueAfterCheckpoint, cardsThisRound,
+         isLastRound, isGameOver, winners } from './game-state.js';
 import { isBot, botEstimate } from './bot.js';
+import { formatLat, formatLon, formatPop } from './geo-format.js';
 
 // Controlled board: renders a shared game `state` and only enables controls when it is
 // THIS device's turn (state.players[currentPlayerIndex].id === myId). Every local action
 // produces a new state and is handed to `onAction(newState)` so the caller can persist it.
 // Remote updates arrive via the returned `setState`.
 //
-// Cardinal games are drawn as a plus: four arms grow outward from the anchor. Cards show
-// their name face-up; their data lives on the back and is flipped into view only when a
-// checkpoint or a knocked-off (correct) contra reveals it. On your turn the drawn card is
-// shown face-up and can be dragged (or tapped) onto a drop zone between/around the cards.
+// Cardinal games are drawn as a plus: four arms grow outward from the start card.
+// Population games are one vertical line, fewest people at the bottom. Cards show their
+// name face-up; their data (county, coordinates or population) is on the back and only
+// flips into view for a contra or a scoring. On your turn the drawn card is shown face-up
+// and can be dragged (or tapped) onto a drop zone between/around the cards.
 export function renderBoard(root, { state, myId, isHost = false, onAction = () => {} }) {
   let current = state;
+  // While contesting a card that sits between two others, the contester taps the neighbour
+  // to flip with it. Purely local: nothing is shared until the choice is made.
+  let picking = false;
 
-  const setState = (s) => { current = s; draw(); };
-  const commit = (s) => { current = s; onAction(s); draw(); };
+  const setState = (s) => { current = s; picking = false; draw(); };
+  const commit = (s) => { current = s; picking = false; onAction(s); draw(); };
   const myTurn = () => current.players[current.currentPlayerIndex].id === myId;
-  // A checkpoint is driven by the current player's device; if that player is a bot, the
+  // A scoring is driven by the current player's device; if that player is a bot, the
   // host drives it instead (bots never have a device of their own).
   const iDriveCheckpoint = () => myTurn() || (isHost && isBot(current.players[current.currentPlayerIndex]));
   const anchorCity = () => current.placements[0].city;
-  const placementOf = (cityId) => current.placements.find((p) => p.city.id === cityId);
-  // The most recently placed card still on the board (skips the anchor and any card a
+  // The most recently placed card still on the board (skips the start card and any card a
   // successful contra knocked off). Used to glow "the last card played".
   const lastPlacedId = () => {
     for (let i = current.placements.length - 1; i >= 1; i--) {
@@ -32,18 +36,28 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     return null;
   };
   const drawnCard = () => current.deck.cards[current.deck.pos];
+  // The two cards a contra flipped stay face-up on its result screen.
+  const contraIds = () => (current.phase === 'contra_result' && current.lastResult
+    ? [current.lastResult.card.id, current.lastResult.neighbour.id] : []);
+  // Cards the scoring walk eliminated, ringed red once the board is revealed.
+  const wrongIds = () => new Set(current.lastCheckpoint?.wrongIds ?? []);
+  const axisOf = (dir) => (dir === 'N' || dir === 'S' ? 'lat' : 'lon');
 
   // Card ids that should play a one-shot animation on the next render.
-  let animFlipId = null;  // card being revealed by a contra (flip)
+  let animFlipIds = [];   // cards being revealed by a contra (flip)
   let animPlaceId = null; // card that has just been placed (slide/scale in)
   let animatedPlaceKey = null; // lastMove index already animated, so we don't repeat it
+  let pickSides = new Map();   // card id -> neighbour side, while picking
 
-  // A card: name on the face, data on the back. `revealed` flips it to show the data. We
-  // deliberately do NOT show the country/flag — it would give away roughly where the city is.
-  function cardEl(city, { revealed = false, faded = false, anchor = false, draggable = false, wrong = false, last = false, id = '' } = {}) {
+  // A card: name (and a ★ for tourist attractions) on the face; county and the data on
+  // the back, in the printed cards' style. `revealed` flips it. `axis` highlights the
+  // coordinate that matters on that arm.
+  function cardEl(city, { revealed = false, faded = false, anchor = false, draggable = false, wrong = false, last = false, axis = null, id = '' } = {}) {
+    const attraction = city.kind === 'attraction';
     const data = current.variant === 'cardinal'
-      ? `${city.lat.toFixed(1)}, ${city.lon.toFixed(1)}`
-      : city.pop.toLocaleString();
+      ? `<span class="coord${axis === 'lon' ? ' dim' : ''}">↑ ${formatLat(city.lat)}</span>
+         <span class="coord${axis === 'lat' ? ' dim' : ''}">→ ${formatLon(city.lon)}</span>`
+      : `<span class="coord">${formatPop(city.pop)} loc.</span>`;
     const cls = ['card'];
     if (revealed) cls.push('revealed');
     if (faded) cls.push('faded');
@@ -51,11 +65,12 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     if (draggable) cls.push('draggable');
     if (wrong) cls.push('wrong');
     if (last) cls.push('last');
-    if (city.id === animFlipId) cls.push('flip-anim');
+    if (pickSides.has(String(city.id))) cls.push('pick');
+    if (animFlipIds.includes(city.id)) cls.push('flip-anim');
     if (city.id === animPlaceId) cls.push('place-anim');
-    return `<div class="${cls.join(' ')}"${id ? ` id="${id}"` : ''}><div class="card-inner">
-      <div class="card-face"><span class="cname">${city.name}</span></div>
-      <div class="card-back">${data}</div></div></div>`;
+    return `<div class="${cls.join(' ')}" data-id="${city.id}"${id ? ` id="${id}"` : ''}><div class="card-inner">
+      <div class="card-face">${attraction ? '<span class="kind" title="Obiectiv turistic">★</span>' : ''}<span class="cname">${city.name}</span></div>
+      <div class="card-back"><span class="bname">${city.name}</span>${city.county ? `<span class="county">${city.county}</span>` : ''}${data}</div></div></div>`;
   }
 
   // A drop target. `dir` is '' for population. Carries where a placed card would go.
@@ -63,15 +78,24 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     return `<div class="dz" data-dir="${dir}" data-index="${index}"></div>`;
   }
 
-  function header() {
+  // The plus can be wider than a phone screen: keep the start card in view after a render.
+  function centerBoard() {
+    const board = root.querySelector('#board');
+    const anchor = board?.querySelector('.anchor');
+    if (anchor) board.scrollLeft = anchor.offsetLeft - (board.clientWidth - anchor.offsetWidth) / 2;
+  }
+
+  function header({ turn = true } = {}) {
     const cur = current.players[current.currentPlayerIndex];
     const you = current.players.find((p) => p.id === myId);
     const scores = current.players.map((p) =>
       `<span class="pscore" data-p="${p.id}">${p.name}: <span class="dcount">${'💎'.repeat(Math.max(0, p.diamonds))} ${p.diamonds}</span></span>`)
       .join(' · ');
+    const placed = Math.min(cardsThisRound(current), current.roundSize);
     return `
       <p class="diamonds">${scores}</p>
-      <p>La rând: <b>${cur.name}</b>${you ? ` — tu ești <b>${you.name}</b>` : ''}</p>`;
+      <p class="round">Runda <b>${current.round}</b> din ${current.numRounds} · cărți puse: <b>${placed}</b>/${current.roundSize}</p>
+      ${turn ? `<p>La rând: <b>${cur.name}</b>${you ? ` — tu ești <b>${you.name}</b>` : ''}</p>` : ''}`;
   }
 
   // Animate a diamond flying from the loser's score to the winner's, then pulse the winner.
@@ -109,50 +133,55 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     return `<div class="draw-banner"><span>Carte la rând:</span>${cardEl(card)}</div>`;
   }
 
+  // Shared per-card options for a card on the board.
+  function boardCardOpts(city, revealAll, lastId, axis) {
+    return {
+      revealed: revealAll || contraIds().includes(city.id),
+      wrong: revealAll && wrongIds().has(city.id),
+      last: city.id === lastId,
+      axis,
+    };
+  }
+
   // One arm as an interleaved sequence: zone, card, zone, card, …, zone. Reversed arms
-  // (N, V) grow away from the anchor, so the whole sequence is flipped; data-index on each
-  // zone keeps the true insertion position regardless of visual order.
+  // (N, V) grow away from the start card, so the whole sequence is flipped; data-index on
+  // each zone keeps the true insertion position regardless of visual order.
   function armSeq(dir, reverse, revealAll, withZones) {
     const arm = current.arms[dir];
     const lastId = revealAll ? null : lastPlacedId();
     const nodes = [];
     for (let i = 0; i <= arm.length; i++) {
       if (withZones) nodes.push(zone(dir, i));
-      if (i < arm.length) {
-        nodes.push(cardEl(arm[i], {
-          revealed: revealAll || placementOf(arm[i].id)?.revealed,
-          wrong: revealAll && placementOf(arm[i].id)?.isCorrect === false,
-          last: arm[i].id === lastId,
-        }));
-      }
+      if (i < arm.length) nodes.push(cardEl(arm[i], boardCardOpts(arm[i], revealAll, lastId, axisOf(dir))));
     }
     return (reverse ? nodes.reverse() : nodes).join('');
   }
 
   function boardHtml(revealAll = false) {
-    // No drop zones while a checkpoint guess is pending (phase is still 'placing' then).
+    // No drop zones while a scoring guess is pending (phase is still 'placing' then).
     const zones = myTurn() && current.phase === 'placing' && !revealAll && !needsCheckpoint(current);
+    const anchor = anchorCity();
+    const anchorOpts = { ...boardCardOpts(anchor, revealAll, null, null), wrong: false, anchor: true };
 
     if (current.variant === 'population') {
+      // line[0] has the fewest people and sits at the BOTTOM, so the column is built top-down
+      // from the end of the line.
       const lastId = revealAll ? null : lastPlacedId();
       const nodes = [];
       current.line.forEach((c, i) => {
         if (zones) nodes.push(zone('', i));
-        nodes.push(cardEl(c, {
-          revealed: revealAll || placementOf(c.id)?.revealed,
-          anchor: c.id === anchorCity().id,
-          wrong: revealAll && placementOf(c.id)?.isCorrect === false,
-          last: c.id === lastId,
-        }));
+        nodes.push(c.id === anchor.id ? cardEl(c, anchorOpts) : cardEl(c, boardCardOpts(c, revealAll, lastId, null)));
       });
       if (zones) nodes.push(zone('', current.line.length));
-      return `<div class="line">${nodes.join('')}</div>${removedHtml()}`;
+      return `<div class="pop-col"><div class="pop-label">↑ mai mulți locuitori</div>
+        <div class="line">${nodes.reverse().join('')}</div>
+        <div class="pop-label">↓ mai puțini locuitori</div></div>${removedHtml()}`;
     }
 
     return `<div class="plus">
       <div class="arm arm-n">${armSeq('N', true, revealAll, zones)}</div>
       <div class="arm arm-v">${armSeq('V', true, revealAll, zones)}</div>
-      <div class="anchor">${cardEl(anchorCity(), { anchor: true })}</div>
+      <div class="anchor">${cardEl(anchor, anchorOpts)}</div>
       <div class="arm arm-e">${armSeq('E', false, revealAll, zones)}</div>
       <div class="arm arm-s">${armSeq('S', false, revealAll, zones)}</div>
     </div>${removedHtml()}`;
@@ -205,11 +234,18 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
   }
 
   function draw() {
-    animFlipId = null;
+    render();
+    centerBoard();
+  }
+
+  function render() {
+    animFlipIds = [];
     animPlaceId = null;
+    pickSides = picking && myTurn() && current.phase === 'challenge_window'
+      ? new Map(contestOptions(current).map((o) => [String(o.city.id), o.side]))
+      : new Map();
     if (isGameOver(current)) {
-      const w = winners(current).map((p) => p.name).join(', ');
-      root.innerHTML = `${header()}<h2>Gata! Câștigă: ${w} 🏆</h2><div id="board">${boardHtml(true)}</div>`;
+      renderGameOver();
       return;
     }
     if (current.phase === 'contra_result') {
@@ -246,17 +282,37 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     renderChallengeControls();
   }
 
-  // Shared result screen after a contra: the challenged card is revealed, the outcome and
-  // diamond transfer are spelled out, and anyone can press Continuă to move on.
+  // How a pair is judged, in words, for the contra result screen.
+  function orderHint(dir) {
+    switch (dir) {
+      case 'N': return 'Pe brațul Nord contează doar latitudinea: spre capăt trebuie să crească.';
+      case 'S': return 'Pe brațul Sud contează doar latitudinea: spre capăt trebuie să scadă.';
+      case 'E': return 'Pe brațul Est contează doar longitudinea: spre capăt trebuie să crească.';
+      case 'V': return 'Pe brațul Vest contează doar longitudinea: spre capăt trebuie să scadă.';
+      default: return 'Mai sus trebuie să stea orașul cu mai mulți locuitori.';
+    }
+  }
+
+  // Shared result screen after a contra: the two flipped cards are shown side by side the
+  // way they lie on the board, the outcome and diamond transfer are spelled out, and
+  // anyone can press Continuă to move on.
   function renderContraResult() {
     const r = current.lastResult;
     const msg = r.contraCorrect
-      ? `✅ Contra <b>corectă</b>! „${r.cardName}" era greșit pusă — <b>${r.challengerName}</b> ia un 💎 de la <b>${r.placerName}</b>, iar cartea iese de pe tablă.`
-      : `❌ Contra <b>greșită</b>! „${r.cardName}" era bine pusă — <b>${r.challengerName}</b> dă un 💎 lui <b>${r.placerName}</b>.`;
-    // Flip the challenged card as it is revealed.
-    animFlipId = current.placements[r.placementIndex].city.id;
+      ? `✅ Contra <b>corectă</b>! „${r.cardName}" era greșit pusă — <b>${r.challengerName}</b> ia un 💎 de la <b>${r.placerName}</b>, iar cartea iese din joc.`
+      : `❌ Contra <b>greșită</b>! „${r.cardName}" era bine pusă — <b>${r.challengerName}</b> dă un 💎 lui <b>${r.placerName}</b>. Cărțile se întorc la loc.`;
+    // The pair in board order: toward the start card / below first.
+    const pair = r.side === 'prev' ? [r.neighbour, r.card] : [r.card, r.neighbour];
+    const axis = r.dir ? axisOf(r.dir) : null;
+    animFlipIds = contraIds();
+    const pairHtml = pair.map((c) => `<figure>${cardEl(c, {
+      revealed: true, axis, wrong: c.id === r.card.id && r.contraCorrect, last: c.id === r.card.id,
+    })}<figcaption>${c.id === r.card.id ? 'pusă acum' : 'vecina'}</figcaption></figure>`).join('');
     root.innerHTML = `${header()}<div id="board">${boardHtml()}</div>
-      <div class="result"><p>${msg}</p><button id="cont">Continuă</button></div>`;
+      <div class="result">
+        <div class="pair pair-${r.dir || 'pop'}">${pairHtml}</div>
+        <p class="hint">${orderHint(r.dir)} Valori egale = corect. Celelalte cărți nu contează.</p>
+        <p>${msg}</p><button id="cont">Continuă</button></div>`;
     root.querySelector('#cont').onclick = () => commit(continueAfterContra(current));
     // Fly a diamond from the loser to the winner, then pulse the winner's score.
     const winnerIdx = r.contraCorrect ? r.challengerIndex : r.placerIndex;
@@ -268,10 +324,32 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     const c = root.querySelector('#controls');
     const eligible = current.players[current.currentPlayerIndex];
     const challenged = current.placements[current.lastMove.placementIndex].city;
+    if (picking) {
+      c.innerHTML = `<p><b>${eligible.name}</b>, cu care vecină compari „${challenged.name}"?
+        Atinge una din cele două cărți evidențiate — doar ea contează.</p>
+        <button id="cancel" class="ghost">Renunță</button>`;
+      root.querySelectorAll('#board .card.pick').forEach((el) => {
+        el.onclick = () => commit(challenge(current, pickSides.get(el.dataset.id)));
+      });
+      c.querySelector('#cancel').onclick = () => { picking = false; draw(); };
+      return;
+    }
     c.innerHTML = `<p><b>${eligible.name}</b>, contrezi plasarea lui <b>${challenged.name}</b>?</p>
       <button id="contra">Contra</button><button id="pass" class="ghost">Las-o</button>`;
-    c.querySelector('#contra').onclick = () => commit(challenge(current));
+    c.querySelector('#contra').onclick = () => {
+      const options = contestOptions(current);
+      if (options.length === 1) {
+        commit(challenge(current, options[0].side));
+      } else {
+        picking = true;
+        draw();
+      }
+    };
     c.querySelector('#pass').onclick = () => commit(passChallenge(current));
+  }
+
+  function scoringTitle() {
+    return isLastRound(current) ? 'Punctaj final' : `Punctaj intermediar (runda ${current.round} din ${current.numRounds})`;
   }
 
   function renderCheckpoint() {
@@ -280,12 +358,12 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     // automatic (pre-filled) guess so a human need only enter the human guesses.
     const board = `<div id="board">${boardHtml(false)}</div>`;
     if (!iDriveCheckpoint()) {
-      root.innerHTML = `${header()}${board}<p>Se punctează checkpoint-ul…</p>`;
+      root.innerHTML = `${header()}${board}<p>${scoringTitle()}: se ghicește…</p>`;
       return;
     }
     root.innerHTML = `${header()}${board}
-      <h3>Checkpoint — câte cărți sunt greșite pe tablă?</h3>
-      <p class="hint">Ghicește fără să întorci cărțile. Nimeresc exact → +2 💎; cel mai aproape → +1 💎.</p>
+      <h3>${scoringTitle()} — câte cărți sunt greșite pe masă?</h3>
+      <p class="hint">Ghicește fără să întorci cărțile. Nimeresc exact → +2 💎; dacă nimeni nu nimerește, cel mai aproape → +1 💎.</p>
       ${current.players.map((p) => {
         const bot = isBot(p);
         return `<label>${p.name}${bot ? ' 🤖' : ''} <input data-p="${p.id}" type="number" min="0"
@@ -300,15 +378,24 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
   }
 
   // After scoring: flip the whole board face-up in a cascade so everyone sees which cards
-  // were mis-placed (red ring), the true count, and who guessed best. Continuă starts a
-  // fresh round (the board is cleared and a new anchor is drawn).
+  // the walk from the start card eliminated (red ring), the true count, and who guessed
+  // best. Continuă starts a fresh round (or shows the winner after the last one).
   function renderCheckpointReveal() {
     const cp = current.lastCheckpoint;
     const who = cp.scorerNames.join(', ');
-    const verb = cp.exact ? 'a nimerit exact' : 'a fost cel mai aproape';
-    const msg = `Pe tablă erau <b>${cp.truth}</b> cărți greșite. <b>${who}</b> ${verb} → +${cp.reward} 💎.`;
+    const verb = cp.exact ? (cp.scorerNames.length > 1 ? 'au nimerit exact' : 'a nimerit exact')
+      : (cp.scorerNames.length > 1 ? 'au fost cei mai aproape' : 'a fost cel mai aproape');
+    const found = cp.truth === 0 ? 'nu era nicio carte greșită'
+      : cp.truth === 1 ? 'era <b>1</b> carte greșită (încercuită cu roșu)'
+      : `erau <b>${cp.truth}</b> cărți greșite (încercuite cu roșu)`;
+    const msg = `Pe masă ${found}. <b>${who}</b> ${verb} → +${cp.reward} 💎.`;
+    const next = cp.final ? 'Vezi câștigătorul' : 'Continuă (runda următoare)';
     root.innerHTML = `${header()}<div id="board">${boardHtml(true)}</div>
-      <div class="result"><p>${msg}</p><button id="cont">Continuă (rundă nouă)</button></div>`;
+      <div class="result"><p>${msg}</p>
+      <p class="hint">${current.variant === 'cardinal'
+        ? 'Am verificat braț cu braț, pornind de la cartea de start'
+        : 'Am verificat de la cartea de start în sus, apoi în jos'}: fiecare carte e comparată cu ultima carte rămasă bună dinaintea ei.</p>
+      <button id="cont">${next}</button></div>`;
     // Cascade the flip: every card starts face-down and flips to its data one after another.
     root.querySelectorAll('#board .card').forEach((el, i) => {
       el.classList.add('reveal-flip');
@@ -318,6 +405,15 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     cp.scorerIds.forEach((id) =>
       root.querySelector(`.pscore[data-p="${id}"] .dcount`)?.classList.add('pulse'));
     root.querySelector('#cont').onclick = () => commit(continueAfterCheckpoint(current));
+  }
+
+  function renderGameOver() {
+    const w = winners(current).map((p) => p.name).join(', ');
+    const standings = [...current.players].sort((a, b) => b.diamonds - a.diamonds)
+      .map((p) => `<li>${p.name}: ${p.diamonds} 💎</li>`).join('');
+    root.innerHTML = `${header({ turn: false })}<h2>Gata! Câștigă: ${w} 🏆</h2><ol class="standings">${standings}</ol>
+      <div id="board">${boardHtml(true)}</div><button id="menu">Meniu</button>`;
+    root.querySelector('#menu').onclick = () => location.reload();
   }
 
   draw();
