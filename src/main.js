@@ -12,10 +12,12 @@ renderLobby(app, { onEnter: enterRoom, onSolo: startSolo });
 
 function enterRoom({ room, me, isHost, deck = DEFAULT_DECK, difficulty = 'legendar' }) {
   let board = null; // board controller once the game is playing
+  let shown = null;  // last game state fetched, so a catch-up refresh doesn't re-render
 
   async function refresh() {
     const fresh = await getRoom(room.id);
     if (fresh.status === 'playing' && fresh.state) {
+      const json = JSON.stringify(fresh.state);
       if (!board) {
         board = renderBoard(app, {
           state: fresh.state,
@@ -23,9 +25,10 @@ function enterRoom({ room, me, isHost, deck = DEFAULT_DECK, difficulty = 'legend
           isHost,
           onAction: (s) => saveState(room.id, s),
         });
-      } else {
+      } else if (json !== shown) {
         board.setState(fresh.state);
       }
+      shown = json;
       return;
     }
     const players = await listPlayers(room.id);
@@ -45,6 +48,8 @@ function enterRoom({ room, me, isHost, deck = DEFAULT_DECK, difficulty = 'legend
 
   subscribeRoom(room.id, refresh);
   refresh();
+  // Back from another app or a locked screen: catch up on anything missed meanwhile.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 }
 
 // Local single-player game against bots. Everything runs on this device: the human plays

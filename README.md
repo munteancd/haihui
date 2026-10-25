@@ -54,10 +54,9 @@ Play with friends via a room code (state syncs through Supabase) or solo against
 Geographic data © GeoNames (CC BY 4.0), credited in the app footer.
 
 ## Setup
-1. Create a Supabase project; run `supabase/schema.sql` in the SQL editor, plus
-   `alter table rooms add column state jsonb;`. Enable Realtime for `rooms` and `players`.
-   (`rooms.num_turns` now stores the number of rounds; no migration needed.)
-2. Put your Supabase URL + publishable key in `src/config.js`.
+Multiplayer needs a free Supabase project: run `supabase/schema.sql` in its SQL editor and
+put the Project URL + publishable key in `src/config.js`. Steps, and what to do when a free
+project gets paused, in `docs/supabase-setup.md`.
 
 ## Dev
 - Serve statically: `npx serve` (or `python -m http.server`) and open the printed URL.
