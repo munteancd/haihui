@@ -24,38 +24,38 @@ node tools/build-romania.mjs path/to/cities500.txt # cities only (no attractions
 ```
 
 Output: `{ source, builtFrom, builtAt, cities: [...], attractions: [...] }`.
-- **cities** (140): every county seat (GeoNames `PPLC`/`PPLA`, plus Buftea for Ilfov) and
-  then the most populous other towns. Each has `id` (GeoNames id), `name` (Romanian
-  spelling, comma-below ș/ț), `county` ("Județul Mureș" / "Municipiul București"), `lat`,
-  `lon`, `pop`. City districts (`Sector 1`…) are skipped. A county seat with an
-  implausibly small population (< 15 000, a GeoNames slip) gets `popSuspect: true`: it
-  stays in the cardinal game but is left out of the population game.
-- **attractions** (up to 38): matched by name (Romanian or English, ignoring diacritics)
-  inside their county in the full dump, never typed in. `kind: "attraction"`, no `pop`, so
-  they only play in the cardinal variant. The script prints one line per attraction
-  (`OK` / `AMBIGUOUS` with the other candidates / `MISSING`); once an id is confirmed it
-  can be pinned with `geonameId` in the script's `ATTRACTIONS` list.
+- **cities** (140): every county seat (GeoNames `PPLC`/`PPLA`, plus Deva for Hunedoara
+  and Buftea for Ilfov, which GeoNames doesn't flag) and then the most populous other
+  towns. Each has `id` (GeoNames id), `name` (Romanian spelling, comma-below ș/ț),
+  `county` ("Județul Mureș" / "Municipiul București"), `lat`, `lon`, `pop`. City districts
+  (`Sector 1`…) are skipped. A county seat with an implausibly small population
+  (< 15 000, a GeoNames slip) gets `popSuspect: true`: it stays in the cardinal game but is
+  left out of the population game. Today that is Călărași (GeoNames says 6 687).
+- **attractions** (38): castles, monasteries, ancient sites, caves, lakes, peaks, dams…
+  Each is pinned to its GeoNames id in the script's `ATTRACTIONS` list (the comment next
+  to it is the name GeoNames uses), so a rebuild can't drift to another place.
+  `kind: "attraction"`, no `pop`, so they only play in the cardinal variant. Where
+  GeoNames leaves the county blank (Lacul Roșu) the entry names it.
+  To add one, give `counties` + `match` names instead of an id: the script searches the
+  dump (Romanian or English names, diacritics ignored) and prints `OK` / `AMBIGUOUS` (with
+  the other candidates) / `MISSING`, then pin the id it found.
 
 Admin1 code → county names in the script were checked against GeoNames' own admin1 list
 (all 42 match).
 
-### Current build (TODO: rebuild from RO.txt)
+### Choosing the attractions
 
-The committed file was built from GeoNames' `cities500.txt`, because the build machine
-could not reach geonames.org. It came from the npm package `cities-500-structured@1.0.1`,
-which bundles GeoNames' `cities500.txt` (a snapshot from March 2023; its coordinates
-matched `data/cities.json` for all 50 Romanian cities there). Consequences until it is
-rebuilt from `RO.txt`:
-- populations are GeoNames' 2023 values, mostly older than the 2021 census;
-- Călărași has a wrong population in that snapshot (6 687), so it is `popSuspect`;
-- only one attraction (Sulina, a town) is found; the other 37 need the full dump.
+GeoNames doesn't have every famous Romanian sight. Missing from the RO dump (October
+2026): Sfinxul and Babele in the Bucegi, Transfăgărășan, Peștera Urșilor, Cascada Bigăr,
+Chipul lui Decebal, Vulcanii Noroioși, Cheile Turzii and Cheile Bicazului, Salina Praid,
+Cimitirul Vesel, the Sighișoara/Râșnov/Alba Carolina/Suceava/Neamț citadels,
+Sarmizegetusa Regia, Putna and Curtea de Argeș monasteries, Podul lui Dumnezeu. Lacul
+Sfânta Ana is there but only as 46.2, 26 (a tenth of a degree), too coarse for cards
+read to the minute, so it was left out. The 38 were picked from well-known sights GeoNames has with precise points. Never
+fill a gap from memory: add a sight only once a source with real coordinates has it.
 
-Running `node tools/build-romania.mjs` on any machine that can reach
-download.geonames.org refreshes the populations, adds the attractions and re-checks
-Călărași; then commit the new `data/romania.json` and bump `CACHE` in `sw.js`.
+### Rebuilding
 
-## Precision
-
-Cards show coordinates in whole degrees and minutes (`46° 46' N`, `24° 42' E`). The game
-compares at that same precision (`toArcMinutes` in `src/geo-format.js`), so two cards that
-read the same are equal, and equal counts as correct.
+`node tools/build-romania.mjs` on a machine that can reach download.geonames.org, then
+commit `data/romania.json` and bump `CACHE` in `sw.js`. The committed file was built from
+the October 2026 RO dump.

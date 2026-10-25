@@ -32,8 +32,8 @@ const COUNTIES = {
 const countyLabel = (code) =>
   code === '10' ? 'Municipiul București' : COUNTIES[code] ? `Județul ${COUNTIES[code]}` : '';
 
-// County seats GeoNames doesn't flag as PPLA: Ilfov is run from Buftea.
-const EXTRA_SEATS = { '43': 'Buftea' };
+// County seats GeoNames doesn't flag as PPLA: Deva (Hunedoara) and Buftea (Ilfov).
+const EXTRA_SEATS = { '21': 'Deva', '43': 'Buftea' };
 
 // Spelling fixes for names GeoNames keeps in English or hyphenated.
 const NAME_FIXES = {
@@ -42,49 +42,52 @@ const NAME_FIXES = {
   'Miercurea-Ciuc': 'Miercurea Ciuc',
 };
 
-// The 38 attractions, matched by name in the dump (Romanian or English, any spelling the
-// dump knows) within the listed counties. `classes` limits the GeoNames feature class
-// (S = spot/building, T = mountain/rock, H = water, L = area, R = road, P = town). Once an
-// attraction's GeoNames id is known it can be pinned with `geonameId` to skip matching.
-const ATTRACTIONS = [
-  { name: 'Castelul Bran', counties: ['09'], match: ['Castelul Bran', 'Bran Castle', 'Castle Bran'] },
-  { name: 'Castelul Peleș', counties: ['30'], match: ['Castelul Peleș', 'Peleș Castle'] },
-  { name: 'Castelul Corvinilor', counties: ['21'], match: ['Castelul Corvinilor', 'Corvin Castle', 'Hunyad Castle', 'Castelul Huniazilor'] },
-  { name: 'Cetatea Sighișoara', counties: ['27'], match: ['Cetatea Sighișoara', 'Cetatea Sighișoarei', 'Sighișoara Citadel'] },
-  { name: 'Cetatea Râșnov', counties: ['09'], match: ['Cetatea Râșnov', 'Cetatea Râșnovului', 'Râșnov Citadel', 'Râșnov Fortress'] },
-  { name: 'Cetatea Alba Carolina', counties: ['01'], match: ['Cetatea Alba Carolina', 'Alba Carolina Citadel', 'Alba Carolina'] },
-  { name: 'Sarmizegetusa Regia', counties: ['21'], match: ['Sarmizegetusa Regia', 'Sarmisegetusa Regia'] },
-  { name: 'Biserica Neagră', counties: ['09'], match: ['Biserica Neagră', 'Black Church'] },
-  { name: 'Mănăstirea Voroneț', counties: ['34'], match: ['Mănăstirea Voroneț', 'Voroneț Monastery'] },
-  { name: 'Mănăstirea Sucevița', counties: ['34'], match: ['Mănăstirea Sucevița', 'Sucevița Monastery'] },
-  { name: 'Mănăstirea Putna', counties: ['34'], match: ['Mănăstirea Putna', 'Putna Monastery'] },
-  { name: 'Mănăstirea Horezu', counties: ['39'], match: ['Mănăstirea Horezu', 'Mănăstirea Hurezi', 'Horezu Monastery', 'Hurezi Monastery'] },
-  { name: 'Mănăstirea Curtea de Argeș', counties: ['03'], match: ['Mănăstirea Curtea de Argeș', 'Curtea de Argeș Monastery', 'Curtea de Argeș Cathedral'] },
-  { name: 'Cetatea de Scaun a Sucevei', counties: ['34'], match: ['Cetatea de Scaun a Sucevei', 'Cetatea Sucevei', 'Suceava Fortress', 'Suceava Citadel'] },
-  { name: 'Cetatea Neamțului', counties: ['28'], match: ['Cetatea Neamțului', 'Cetatea Neamț', 'Neamț Citadel', 'Neamț Fortress'] },
-  { name: 'Cimitirul Vesel', counties: ['25'], match: ['Cimitirul Vesel', 'Merry Cemetery'] },
-  { name: 'Salina Turda', counties: ['13'], match: ['Salina Turda', 'Turda Salt Mine'] },
-  { name: 'Salina Praid', counties: ['20'], match: ['Salina Praid', 'Praid Salt Mine'] },
-  { name: 'Cheile Turzii', counties: ['13'], match: ['Cheile Turzii', 'Turda Gorge'] },
-  { name: 'Cheile Bicazului', counties: ['28', '20'], match: ['Cheile Bicazului', 'Bicaz Gorge'] },
-  { name: 'Lacul Roșu', counties: ['20'], classes: ['H'], match: ['Lacul Roșu', 'Lacu Roșu', 'Red Lake'] },
-  { name: 'Lacul Sfânta Ana', counties: ['20'], classes: ['H'], match: ['Lacul Sfânta Ana', 'Lacul Sf. Ana', 'Lake Saint Anne', 'Lake Sfânta Ana'] },
-  { name: 'Lacul Bâlea', counties: ['33'], classes: ['H'], match: ['Lacul Bâlea', 'Bâlea Lac', 'Bâlea Lake'] },
-  { name: 'Transfăgărășan', counties: ['33', '03'], match: ['Transfăgărășan', 'Transfăgărăşan', 'DN7C'] },
-  { name: 'Sfinxul din Bucegi', counties: ['30', '16'], classes: ['T', 'S'], match: ['Sfinxul', 'Sfinxul din Bucegi', 'Romanian Sphinx'] },
-  { name: 'Babele', counties: ['30', '16'], classes: ['T', 'S'], match: ['Babele'] },
-  { name: 'Vârful Moldoveanu', counties: ['03'], classes: ['T'], match: ['Vârful Moldoveanu', 'Moldoveanu', 'Moldoveanu Peak'] },
-  { name: 'Vârful Omu', counties: ['30', '09', '16'], classes: ['T'], match: ['Vârful Omu', 'Omu', 'Omu Peak'] },
-  { name: 'Vulcanii Noroioși', counties: ['11'], match: ['Vulcanii Noroioși', 'Pâclele Mari', 'Vulcanii Noroioși de la Pâclele Mari', 'Mud Volcanoes'] },
-  { name: 'Râpa Roșie', counties: ['01'], match: ['Râpa Roșie', 'Red Ravine'] },
-  { name: 'Peștera Urșilor', counties: ['05'], match: ['Peștera Urșilor', 'Bears Cave', "Bears' Cave", 'Bear Cave'] },
-  { name: 'Peștera Scărișoara', counties: ['01'], match: ['Peștera Scărișoara', 'Ghețarul Scărișoara', 'Scărișoara Cave', 'Scărișoara Glacier Cave'] },
-  { name: 'Cascada Bigăr', counties: ['12'], match: ['Cascada Bigăr', 'Bigăr Waterfall', 'Izvorul Bigăr'] },
-  { name: 'Podul lui Dumnezeu', counties: ['26'], match: ['Podul lui Dumnezeu', 'Podul Natural de la Ponoarele', "God's Bridge"] },
-  { name: 'Cazanele Dunării', counties: ['26'], match: ['Cazanele Dunării', 'Cazanele Mari', 'Cazanele'] },
-  { name: 'Chipul lui Decebal', counties: ['26'], match: ['Chipul lui Decebal', 'Statuia lui Decebal', 'Rock Sculpture of Decebalus', 'Decebalus Rex'] },
-  { name: 'Sulina (Delta Dunării)', counties: ['37'], classes: ['P'], match: ['Sulina'] },
-  { name: 'Barajul Vidraru', counties: ['03'], match: ['Barajul Vidraru', 'Vidraru Dam', 'Lacul Vidraru'] },
+// The 38 attractions, each pinned to its GeoNames id (the comment is the name GeoNames
+// gives it), so a rebuild can't drift to another place. `county` is only needed where
+// GeoNames leaves the county blank. A new attraction can be added without an id: give
+// `counties` and `match` names instead (Romanian or English, diacritics ignored;
+// optionally `classes`: S = spot/building, T = mountain/rock, H = water, L = area,
+// R = road, P = town) and the script searches the dump and reports what it found, so the
+// id can then be pinned.
+export const ATTRACTIONS = [
+  { name: 'Castelul Bran', geonameId: 12035759 },                // Castelul Bran
+  { name: 'Castelul Peleș', geonameId: 12059751 },               // Peles Castle
+  { name: 'Castelul Corvinilor', geonameId: 7535371 },           // Hunyad Castle
+  { name: 'Cetatea Poenari', geonameId: 10171158 },              // Poenari Castle
+  { name: 'Palatul Parlamentului', geonameId: 6691771 },         // Palace of the Parliament
+  { name: 'Palatul Culturii din Iași', geonameId: 6949053 },     // Palatul Culturii Iași
+  { name: 'Salina Turda', geonameId: 7602075 },                  // Salina Turda
+  { name: 'Biserica Neagră', geonameId: 7302228 },               // Black Church
+  { name: 'Mănăstirea Voroneț', geonameId: 7522191 },            // Voroneţ Monastery
+  { name: 'Mănăstirea Sucevița', geonameId: 7522193 },           // Suceviţa Monastery
+  { name: 'Mănăstirea Moldovița', geonameId: 7522192 },          // Moldoviţa Monastery
+  { name: 'Mănăstirea Horezu', geonameId: 676023 },              // Mânăstirea Horezu
+  { name: 'Mănăstirea Snagov', geonameId: 666608 },              // Mânăstirea Snagov
+  { name: 'Histria', geonameId: 676144 },                        // Histria
+  { name: 'Tropaeum Traiani', geonameId: 664583 },               // Tropaeum Traiani
+  { name: 'Cetatea Enisala', geonameId: 13158353 },              // Ruinele Cetăţii Medievale Enisala
+  { name: 'Peștera Scărișoara', geonameId: 667718 },             // Peştera Scărişoara
+  { name: 'Peștera Muierilor', geonameId: 7576257 },             // Peștera Muierilor - cave entrance
+  { name: 'Peștera Sfântului Andrei', geonameId: 13247444 },     // Peştera Sfântului Apostol Andrei
+  { name: 'Râpa Roșie', geonameId: 11153736 },                   // Rapa Rosie
+  { name: 'Cazanele Mari', geonameId: 13491523 },                // Cazanele Mari
+  { name: 'Lacul Bâlea', geonameId: 684856 },                    // Lacul Bâlea
+  { name: 'Lacul Roșu', geonameId: 668593, county: '20' },       // Lacul Roşu
+  { name: 'Lacul Bucura', geonameId: 683511 },                   // Lacul Bucura
+  { name: 'Vârful Moldoveanu', geonameId: 672907 },              // Moldoveanu
+  { name: 'Vârful Omu', geonameId: 671818 },                     // Omu
+  { name: 'Crucea de pe Caraiman', geonameId: 11820612 },        // Caraiman Peak Heroes Cross
+  { name: 'Vârful Negoiu', geonameId: 8133401 },                 // Vf. Negoiu
+  { name: 'Pietrosul Rodnei', geonameId: 8741063 },              // Pietrosul Rodnei
+  { name: 'Vârful Toaca (Ceahlău)', geonameId: 8741061 },        // Toaca
+  { name: 'Piatra Craiului', geonameId: 670901 },                // Piatra Craiului
+  { name: 'Muntele Tâmpa', geonameId: 7874271 },                 // Tampa
+  { name: 'Barajul Vidraru', geonameId: 7284201 },               // Vidraru Dam
+  { name: 'Porțile de Fier I', geonameId: 669824 },              // Hidrocentrala Porţile de Fier I
+  { name: 'Pasul Tihuța', geonameId: 684812 },                   // Tihuța Pass
+  { name: 'Cascada Cailor', geonameId: 13300887 },               // Cascada Cailor
+  { name: 'Farul Vechi Sulina', geonameId: 13103361 },           // Farul Vechi din Sulina
+  { name: 'Mamaia', geonameId: 12509557 },                       // Mamaia
 ];
 
 // GeoNames still writes some names with a cedilla (ş ţ); Romanian uses a comma below.
@@ -92,7 +95,7 @@ const fixDiacritics = (s) =>
   s.replace(/ş/g, 'ș').replace(/Ş/g, 'Ș').replace(/ţ/g, 'ț').replace(/Ţ/g, 'Ț');
 const cleanName = (s) => { const n = fixDiacritics(s); return NAME_FIXES[n] ?? n; };
 // Loose key for matching names: no diacritics, no case, no punctuation.
-const key = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+const key = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   .replace(/[^a-z0-9]+/g, ' ').trim();
 
 // GeoNames dump columns (tab-separated, 0-indexed).
@@ -165,13 +168,15 @@ export function selectCities(rows) {
   return { cities, warnings };
 }
 
-// Find each attraction in the dump. Returns the found ones plus a line per attraction.
-export function selectAttractions(rows) {
+// Find each attraction in the dump: by its pinned id, or else by name within its
+// counties (GeoNames leaves some features' county blank, '00'). Returns the ones found
+// plus a report line per attraction.
+export function selectAttractions(rows, list = ATTRACTIONS) {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const attractions = [];
   const report = [];
   const classRank = { S: 0, T: 1, H: 2, L: 3, V: 4, R: 5, U: 6, P: 7 };
-  for (const a of ATTRACTIONS) {
+  for (const a of list) {
     let candidates;
     if (a.geonameId) {
       candidates = byId.has(a.geonameId) ? [byId.get(a.geonameId)] : [];
@@ -179,13 +184,14 @@ export function selectAttractions(rows) {
       const wanted = new Set(a.match.map(key));
       const classes = a.classes ?? ['S', 'T', 'H', 'L', 'V', 'R', 'U'];
       candidates = rows.filter((r) => r.cc === 'RO' && classes.includes(r.fclass)
-        && a.counties.includes(r.admin1)
+        && (a.counties.includes(r.admin1) || r.admin1 === '00' || r.admin1 === '')
         && [r.name, r.ascii, ...r.alt].some((n) => wanted.has(key(n))));
       candidates.sort((x, y) => (classRank[x.fclass] ?? 9) - (classRank[y.fclass] ?? 9) || y.pop - x.pop);
     }
     if (candidates.length === 0) { report.push(`MISSING   ${a.name}`); continue; }
     const r = candidates[0];
-    attractions.push({ id: r.id, name: a.name, county: countyLabel(r.admin1), lat: r.lat, lon: r.lon, kind: 'attraction' });
+    const county = countyLabel(r.admin1) || countyLabel(a.county ?? (a.counties?.length === 1 ? a.counties[0] : ''));
+    attractions.push({ id: r.id, name: a.name, county, lat: r.lat, lon: r.lon, kind: 'attraction' });
     const others = candidates.slice(1, 4).map((c) => `${c.id} ${c.name} ${c.fclass}.${c.fcode}`).join('; ');
     report.push(`${candidates.length > 1 ? 'AMBIGUOUS' : 'OK       '} ${a.name} <- ${r.id} ${r.name} ${r.fclass}.${r.fcode} ${r.lat},${r.lon}${others ? `   (also: ${others})` : ''}`);
   }

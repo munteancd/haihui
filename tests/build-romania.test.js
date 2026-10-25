@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { deflateRawSync } from 'node:zlib';
-import { selectCities, selectAttractions, unzipEntry } from '../tools/build-romania.mjs';
+import { selectCities, selectAttractions, unzipEntry, ATTRACTIONS } from '../tools/build-romania.mjs';
 
 // A minimal GeoNames-shaped row (only the fields the build script reads).
 const row = (id, name, fclass, fcode, admin1, pop, { lat = 45, lon = 25, alt = [] } = {}) =>
@@ -32,14 +32,30 @@ test('attractions are matched by name inside their county, ignoring towns and di
     row(10, 'Bran', 'P', 'PPLA2', '09', 5000),
     row(11, 'Bran Castle', 'S', 'CSTL', '09', 0, { alt: ['Castelul Bran'], lat: 45.515, lon: 25.367 }),
     row(12, 'Castelul Bran', 'S', 'CSTL', '30', 0),   // wrong county: ignored
+    row(13, 'Lacul Roşu', 'H', 'LK', '00', 0),         // GeoNames left the county blank
   ];
-  const { attractions, report } = selectAttractions(rows);
+  const list = [
+    { name: 'Castelul Bran', counties: ['09'], match: ['Castelul Bran'] },
+    { name: 'Lacul Roșu', counties: ['20'], match: ['Lacul Roșu'] },
+    { name: 'Castelul Peleș', counties: ['30'], match: ['Peleș Castle'] },
+  ];
+  const { attractions, report } = selectAttractions(rows, list);
   const bran = attractions.find((a) => a.name === 'Castelul Bran');
   assert.equal(bran.id, 11);
   assert.equal(bran.lat, 45.515);
   assert.equal(bran.county, 'Județul Brașov');
   assert.equal(bran.kind, 'attraction');
+  assert.equal(attractions.find((a) => a.name === 'Lacul Roșu').county, 'Județul Harghita');
   assert.ok(report.some((l) => l.startsWith('MISSING') && l.includes('Castelul Peleș')));
+});
+
+test('pinned attractions are taken by GeoNames id', () => {
+  const rows = [row(7535371, 'Hunyad Castle', 'S', 'CSTL', '21', 0, { lat: 45.74922, lon: 22.88835 })];
+  const { attractions } = selectAttractions(rows, [{ name: 'Castelul Corvinilor', geonameId: 7535371 }]);
+  assert.deepEqual(attractions, [{ id: 7535371, name: 'Castelul Corvinilor', county: 'Județul Hunedoara',
+    lat: 45.74922, lon: 22.88835, kind: 'attraction' }]);
+  assert.equal(ATTRACTIONS.length, 38);
+  assert.ok(ATTRACTIONS.every((a) => a.geonameId), 'every attraction is pinned');
 });
 
 test('unzipEntry reads a deflated file out of a zip archive', () => {

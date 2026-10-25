@@ -30,9 +30,10 @@ Two variants, chosen at the start:
 Play with friends via a room code (state syncs through Supabase) or solo against bots.
 
 ## Decks
-- **România** (default) — 140 Romanian cities: every county seat plus the largest other
-  towns, with county and population; tourist attractions (★) join the cardinal variant
-  once `data/romania.json` is built from the full GeoNames dump (see `docs/data.md`).
+- **România** (default) — 140 Romanian cities (every county seat plus the largest other
+  towns, with county and population) and 38 tourist attractions (★: castles,
+  monasteries, caves, lakes, peaks…), which play in the cardinal variant only. Built from
+  the GeoNames dump for Romania by `tools/build-romania.mjs` (see `docs/data.md`).
 - **Lume** — the world cities (top 50 per country), with difficulty tiers.
 
 Geographic data © GeoNames (CC BY 4.0), credited in the app footer.
