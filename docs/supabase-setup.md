@@ -12,8 +12,12 @@ Multiplayer rooms run on a free Supabase project. Solo games don't need it.
    do. Never put the secret key in the repo.
 
 Free projects are paused after about a week without use, and a paused project stops
-resolving (rooms fail with "Failed to fetch"). Restore it from the dashboard; if it can't
-be restored, create a new project as above and update `src/config.js`.
+resolving (rooms fail with "Failed to fetch"). To prevent that,
+`.github/workflows/supabase-keepalive.yml` reads the `rooms` table every Monday and
+Thursday (it reads the URL and key from `src/config.js`, so nothing else needs updating).
+A red run under the repo's Actions tab means the project is paused or gone: restore it
+from the dashboard; if it can't be restored, create a new project as above and update
+`src/config.js`.
 
 Current project: `sgflranhpapgmprjxors` (org "HaiHui", created October 2026; the July 2026
 project `vuxgvhdyhteooivvlsha` is gone).

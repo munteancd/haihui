@@ -55,8 +55,9 @@ Geographic data © GeoNames (CC BY 4.0), credited in the app footer.
 
 ## Setup
 Multiplayer needs a free Supabase project: run `supabase/schema.sql` in its SQL editor and
-put the Project URL + publishable key in `src/config.js`. Steps, and what to do when a free
-project gets paused, in `docs/supabase-setup.md`.
+put the Project URL + publishable key in `src/config.js`. A scheduled GitHub Action pings
+it twice a week so the free project isn't paused. Steps, and what to do if it is paused
+anyway, in `docs/supabase-setup.md`.
 
 ## Dev
 - Serve statically: `npx serve` (or `python -m http.server`) and open the printed URL.
