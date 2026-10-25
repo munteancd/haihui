@@ -1,7 +1,22 @@
 # Haihui
 
+**▶ Joacă: https://munteancd.github.io/haihui/**
+
 Multiplayer place-the-card geography game (PWA), inspired by the Romanian board game
-"Hai-Hui prin România" (Cardline/Timeline style).
+"Hai-Hui prin România" (Cardline/Timeline style). A fan project, not affiliated with the
+board game's publishers.
+
+## Pe scurt, pentru jucători
+
+- Deschide linkul de mai sus pe telefon sau pe calculator. Nu trebuie cont.
+- **Singur:** la „Solo cu boți” alegi varianta și apeși **Începe**.
+- **Cu prietenii:** unul apasă **Creează** la „Cameră nouă” și le dă celorlalți codul de 4
+  litere. Ceilalți îl scriu la „Intră cu cod”. Când sunt toți, gazda apasă **Start joc**.
+- **Regulile:** butonul **Cum se joacă** din meniu.
+- **Ca aplicație pe telefon:** Android/Chrome: meniul ⋮ → *Adaugă pe ecranul de pornire*.
+  iPhone/Safari: *Partajează* → *Adaugă pe ecranul principal*.
+- După o actualizare, pagina se reîncarcă singură. Un joc cu prietenii început înainte de
+  actualizare nu mai continuă: faceți o cameră nouă.
 
 ## Rules (as the app plays them)
 
@@ -49,5 +64,13 @@ Geographic data © GeoNames (CC BY 4.0), credited in the app footer.
 - Tests: `npm test` (pure game logic + the data build helpers).
 - Any frontend change: bump `CACHE` in `sw.js` so open tabs pick it up.
 
+Where things live:
+- `src/game-state.js` — the game as pure state transitions (turns, contra, rounds, scoring);
+  `src/rules-cardinal.js` / `src/rules-population.js` — what counts as correct.
+- `src/board-ui.js`, `src/lobby-ui.js` — the screens; `src/main.js` wires solo and rooms.
+- `src/bot.js` — the solo bots; `src/realtime-sync.js` — Supabase rooms.
+- `src/decks.js` — deck choice; `data/` — the card data, built by `tools/`.
+
 ## Deploy
-GitHub Pages from the default branch, root. Live at `munteancd.github.io/haihui`.
+GitHub Pages from `master`, repo root: a push to `master` is live within a minute or two
+at https://munteancd.github.io/haihui/. Work on a branch and merge when ready.
