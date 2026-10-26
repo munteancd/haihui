@@ -40,6 +40,7 @@ const NAME_FIXES = {
   'Bucharest': 'București',
   'Târgu-Mureș': 'Târgu Mureș',
   'Miercurea-Ciuc': 'Miercurea Ciuc',
+  'Chisinau': 'Chișinău', // Moldova, in the Lume/Europa decks
 };
 
 // The 38 attractions, each pinned to its GeoNames id (the comment is the name GeoNames
@@ -93,7 +94,7 @@ export const ATTRACTIONS = [
 // GeoNames still writes some names with a cedilla (ş ţ); Romanian uses a comma below.
 const fixDiacritics = (s) =>
   s.replace(/ş/g, 'ș').replace(/Ş/g, 'Ș').replace(/ţ/g, 'ț').replace(/Ţ/g, 'Ț');
-const cleanName = (s) => { const n = fixDiacritics(s); return NAME_FIXES[n] ?? n; };
+export const cleanName = (s) => { const n = fixDiacritics(s); return NAME_FIXES[n] ?? n; };
 // Loose key for matching names: no diacritics, no case, no punctuation.
 const key = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   .replace(/[^a-z0-9]+/g, ' ').trim();

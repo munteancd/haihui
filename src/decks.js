@@ -1,19 +1,22 @@
 // The decks a game can be played with. România: Romanian cities, plus tourist attractions
-// in the cardinal game. Lume: the world cities, narrowed by difficulty.
+// in the cardinal game. Lume and Europa: GeoNames cities narrowed by difficulty.
+// `sizes` is how many cards each difficulty plays with (shown in the lobby).
 export const DECKS = {
   romania: { label: 'România', file: 'data/romania.json' },
-  world: { label: 'Lume', file: 'data/cities.json' },
+  world: { label: 'Lume', file: 'data/cities.json', sizes: [200, 800, 2000, 7740] },
+  europe: { label: 'Europa', file: 'data/europe.json', sizes: [85, 335, 935, 2232] },
 };
 export const DEFAULT_DECK = 'romania';
 
-// Difficulty (Lume only) = how many cities are in play, kept to the most populous
-// (best-known) ones. Easier tiers use a small, famous pool; Legendar uses everything.
-export const DIFFICULTY = { usor: 200, mediu: 800, greu: 2000, legendar: Infinity };
+// Difficulty = the hardest tier in play. tools/build-cities.mjs gives every card the easiest
+// tier it plays at: 1 holds capitals and well-known big cities, 4 everything else.
+export const DIFFICULTY = { usor: 1, mediu: 2, greu: 3, legendar: 4 };
+export const DIFFICULTY_LABELS = { usor: 'Ușor', mediu: 'Mediu', greu: 'Greu', legendar: 'Legendar' };
+export const DEFAULT_DIFFICULTY = 'mediu';
 
-// The pool of cities a difficulty draws from: the top `poolSize` by population.
-export function pickPool(cities, poolSize) {
-  if (poolSize === Infinity || cities.length <= poolSize) return cities.slice();
-  return [...cities].sort((a, b) => b.pop - a.pop).slice(0, poolSize);
+// The cards of a tiered deck up to (and including) `tier`.
+export function pickPool(cities, tier) {
+  return cities.filter((c) => (c.tier ?? 4) <= tier);
 }
 
 // The cards a game draws from, given the deck's loaded data. Attractions have no
@@ -24,5 +27,5 @@ export function poolFor(deckId, data, variant, difficulty = 'legendar') {
     if (variant === 'population') return data.cities.filter((c) => !c.popSuspect);
     return [...data.cities, ...(data.attractions || [])];
   }
-  return pickPool(data, DIFFICULTY[difficulty] ?? Infinity);
+  return pickPool(data, DIFFICULTY[difficulty] ?? 4);
 }

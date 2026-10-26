@@ -29,17 +29,39 @@ test('România population plays cities only (attractions have no population)', (
   assert.deepEqual(poolFor('romania', romania, 'population').map((c) => c.id), [1]);
 });
 
-test('Lume keeps its difficulty tiers', () => {
-  const world = Array.from({ length: 300 }, (_, i) => ({ id: i, pop: i }));
-  assert.equal(poolFor('world', world, 'cardinal', 'usor').length, 200);
-  assert.equal(poolFor('world', world, 'population', 'legendar').length, 300);
-  assert.equal(poolFor('world', world, 'cardinal', 'usor')[0].pop, 299); // most populous first
+test('Lume and Europa play the cards up to the chosen difficulty tier', () => {
+  const deck = [1, 1, 2, 3, 4, 4].map((tier, id) => ({ id, tier, pop: 1000 }));
+  for (const id of ['world', 'europe']) {
+    assert.equal(poolFor(id, deck, 'cardinal', 'usor').length, 2);
+    assert.equal(poolFor(id, deck, 'population', 'mediu').length, 3);
+    assert.equal(poolFor(id, deck, 'cardinal', 'greu').length, 4);
+    assert.equal(poolFor(id, deck, 'cardinal', 'legendar').length, 6);
+  }
+  assert.deepEqual(pickPool(deck, 1).map((c) => c.id), [0, 1]);
 });
 
-test('pickPool keeps only the most populous cities', () => {
-  const cs = [{ id: 1, pop: 100 }, { id: 2, pop: 900 }, { id: 3, pop: 500 }, { id: 4, pop: 300 }];
-  assert.deepEqual(pickPool(cs, 2).map((c) => c.id), [2, 3]);
-  assert.equal(pickPool(cs, Infinity).length, 4);
+// The lobby shows DECKS[…].sizes; they must match what the build put in the data.
+for (const id of ['world', 'europe']) {
+  test(`the committed ${DECKS[id].label} deck matches its tier sizes and is well-formed`, () => {
+    const data = JSON.parse(readFileSync(new URL(`../${DECKS[id].file}`, import.meta.url), 'utf8'));
+    const sizes = [1, 2, 3, 4].map((t) => data.filter((c) => c.tier <= t).length);
+    assert.deepEqual(sizes, DECKS[id].sizes);
+    assert.equal(new Set(data.map((c) => c.id)).size, data.length);
+    for (const c of data) {
+      assert.ok(c.name && /^[A-Z]{2}$/.test(c.country), `${c.id} has a name and country`);
+      assert.ok(Math.abs(c.lat) <= 90 && Math.abs(c.lon) <= 180 && c.pop > 0, `${c.name} has data`);
+    }
+    // an easy game never deals two cards with the same name
+    const easy = data.filter((c) => c.tier <= 2);
+    assert.equal(new Set(easy.map((c) => c.name)).size, easy.length);
+  });
+}
+
+test('the Europa deck stays in Europe', () => {
+  const data = JSON.parse(readFileSync(new URL('../data/europe.json', import.meta.url), 'utf8'));
+  for (const c of data) assert.ok(c.lat > 27 && c.lat < 72 && c.lon > -32 && c.lon < 60, `${c.name} (${c.country})`);
+  const names = new Set(data.filter((c) => c.tier === 1).map((c) => c.name));
+  for (const n of ['Paris', 'London', 'Berlin', 'Rome', 'București', 'Chișinău', 'Istanbul']) assert.ok(names.has(n), n);
 });
 
 test('the committed România deck is real-sized and well-formed', () => {

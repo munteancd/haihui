@@ -12,6 +12,9 @@ board game's publishers.
 - **Singur:** la „Solo cu boți” alegi varianta și apeși **Începe**.
 - **Cu prietenii:** unul apasă **Creează** la „Cameră nouă” și le dă celorlalți codul de 4
   litere. Ceilalți îl scriu la „Intră cu cod”. Când sunt toți, gazda apasă **Start joc**.
+- **Pachetul:** România (orașe și obiective turistice), Lume sau Europa. La Lume și Europa
+  alegi și dificultatea: Ușor are doar capitale și orașe mari, cunoscute; Legendar le are
+  pe toate.
 - **Regulile:** butonul **Cum se joacă** din meniu.
 - **Ca aplicație pe telefon:** Android/Chrome: meniul ⋮ → *Adaugă pe ecranul de pornire*.
   iPhone/Safari: *Partajează* → *Adaugă pe ecranul principal*.
@@ -49,14 +52,18 @@ Play with friends via a room code (state syncs through Supabase) or solo against
   towns, with county and population) and 38 tourist attractions (★: castles,
   monasteries, caves, lakes, peaks…), which play in the cardinal variant only. Built from
   the GeoNames dump for Romania by `tools/build-romania.mjs` (see `docs/data.md`).
-- **Lume** — the world cities (top 50 per country), with difficulty tiers.
+- **Lume** — 7 740 world cities, in four difficulties: Ușor plays the 200 best-known
+  (capitals and big cities), Legendar all of them. Cards show the country.
+- **Europa** — 2 232 European cities (Russia up to the Urals, Istanbul and East Thrace),
+  same four difficulties from 85 cities (capitals and 400 000+ cities) up.
 
 Geographic data © GeoNames (CC BY 4.0), credited in the app footer.
 
 ## Setup
 Multiplayer needs a free Supabase project: run `supabase/schema.sql` in its SQL editor and
-put the Project URL + publishable key in `src/config.js`. Steps, and what to do when a free
-project gets paused, in `docs/supabase-setup.md`.
+put the Project URL + publishable key in `src/config.js`. A scheduled GitHub Action pings
+it twice a week so the free project isn't paused. Steps, and what to do if it is paused
+anyway, in `docs/supabase-setup.md`.
 
 ## Dev
 - Serve statically: `npx serve` (or `python -m http.server`) and open the printed URL.
@@ -69,6 +76,8 @@ Where things live:
 - `src/board-ui.js`, `src/lobby-ui.js` — the screens; `src/main.js` wires solo and rooms.
 - `src/bot.js` — the solo bots; `src/realtime-sync.js` — Supabase rooms.
 - `src/decks.js` — deck choice; `data/` — the card data, built by `tools/`.
+- `css/style.css` — the look: colour tokens at the top (light, plus a dark-mode block),
+  then components; `src/logo.js` / `icon.svg` — the compass logo.
 
 ## Deploy
 GitHub Pages from `master`, repo root: a push to `master` is live within a minute or two
