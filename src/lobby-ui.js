@@ -1,6 +1,6 @@
 import { createRoom, joinRoom } from './realtime-sync.js';
 import { DECKS, DEFAULT_DECK, DIFFICULTY_LABELS, DEFAULT_DIFFICULTY } from './decks.js';
-import { DEFAULT_ROUNDS } from './game-state.js';
+import { DEFAULT_ROUNDS, ROUND_SIZE, ROUND_SIZES } from './game-state.js';
 import { LOGO } from './logo.js';
 import { avatar } from './avatar.js';
 
@@ -20,6 +20,8 @@ function difficultyOptions(deckId, selected = DEFAULT_DIFFICULTY) {
   }).join('');
 }
 const DIFFICULTIES = difficultyOptions(DEFAULT_DECK);
+const ROUND_SIZE_OPTIONS = ROUND_SIZES.map((n) =>
+  `<option value="${n}"${n === ROUND_SIZE ? ' selected' : ''}>${n} cărți</option>`).join('');
 
 // The rules in a nutshell, in our own words.
 const HOW_TO = `
@@ -30,15 +32,16 @@ const HOW_TO = `
     <li>După ce ai pus cartea, următorul jucător poate da <b>Contra</b>. Dacă nu vrea, poate cel de după el, și tot așa.</li>
     <li>La contra se întorc cartea pusă și <b>o singură</b> vecină a ei (dacă are două, alege cel care dă contra). Doar perechea asta contează; valori egale = corect.</li>
     <li>Contra corectă: cine a pus cartea dă un 💎 celui care a dat contra, iar cartea iese din joc. Contra greșită: cel care a dat contra dă un 💎. Cine nu mai are 💎 nu dă nimic — câștigătorul ia din bancă.</li>
-    <li>O rundă are 15 cărți. La final fiecare ghicește câte cărți sunt greșite pe masă, fără să le vadă.</li>
+    <li>O rundă are 15 cărți (sau 18, 20, 25 — se alege din meniu). La final fiecare ghicește câte cărți sunt greșite pe masă, fără să le vadă.</li>
     <li>Apoi se întorc toate: braț cu braț, pornind de la cartea de start, fiecare carte e comparată cu ultima carte bună dinaintea ei; cele greșite ies.</li>
     <li>Cine ghicește exact ia 2 💎 din bancă; dacă nimeni nu nimerește, cel mai apropiat ia 1 💎. Masa se golește și runda următoare începe cu o carte de start nouă.</li>
     <li>Fiecare începe cu 4 💎. După ultima rundă câștigă cine are cele mai multe 💎.</li>
     <li>Varianta <b>Populație</b>: o singură coloană, orașele cu cei mai puțini locuitori jos, cele mai mari sus. Obiectivele turistice (★) apar doar la puncte cardinale.</li>
   </ol>`;
 
-// Create/join screen. `onEnter({ room, me, isHost, deck, difficulty })` runs once this
-// device is in a multiplayer room; `onSolo({ variant, deck, difficulty, numBots, numRounds })`
+// Create/join screen. `onEnter({ room, me, isHost, deck, difficulty, roundSize })` runs once
+// this device is in a multiplayer room; `onSolo({ variant, deck, difficulty, numBots, numRounds,
+// roundSize })`
 // starts a local game against bots (no other players needed).
 export function renderLobby(root, { onEnter, onSolo }) {
   root.innerHTML = `
@@ -57,6 +60,7 @@ export function renderLobby(root, { onEnter, onSolo }) {
           <label>Pachet <select id="deck">${DECK_OPTIONS}</select></label>
           <label>Dificultate <select id="difficulty">${DIFFICULTIES}</select></label>
           <label>Runde <input id="rounds" type="number" value="${DEFAULT_ROUNDS}" min="1" max="5" /></label>
+          <label>Cărți pe rundă <select id="round-size">${ROUND_SIZE_OPTIONS}</select></label>
           <label class="full">Numele tău <input id="host-name" placeholder="Cristi" /></label>
         </div>
         <button id="create" class="wide">Creează camera</button>
@@ -79,6 +83,7 @@ export function renderLobby(root, { onEnter, onSolo }) {
           <label>Dificultate <select id="solo-difficulty">${DIFFICULTIES}</select></label>
           <label>Boți <input id="solo-bots" type="number" value="2" min="1" max="5" /></label>
           <label>Runde <input id="solo-rounds" type="number" value="${DEFAULT_ROUNDS}" min="1" max="5" /></label>
+          <label>Cărți pe rundă <select id="solo-round-size">${ROUND_SIZE_OPTIONS}</select></label>
         </div>
         <button id="solo" class="wide">Începe</button>
       </section>
@@ -118,7 +123,7 @@ export function renderLobby(root, { onEnter, onSolo }) {
       const name = val('#host-name') || 'Gazdă';
       const room = await createRoom({ variant, numRounds: rounds('#rounds') });
       const { player } = await joinRoom(room.code, name);
-      onEnter({ room, me: player, isHost: true, deck, difficulty });
+      onEnter({ room, me: player, isHost: true, deck, difficulty, roundSize: Number(val('#round-size')) });
     } catch (e) { showError(e); }
   };
 
@@ -136,15 +141,17 @@ export function renderLobby(root, { onEnter, onSolo }) {
       difficulty: val('#solo-difficulty'),
       numBots: Number(val('#solo-bots')),
       numRounds: rounds('#solo-rounds'),
+      roundSize: Number(val('#solo-round-size')),
     });
   };
 }
 
 // Waiting room: shows the code + live player list. Host sees a Start button. The room's
-// `num_turns` column holds the number of rounds. The deck is the host's choice and only
-// known on the host's device.
-export function renderWaiting(root, { room, me, players, isHost, deck, onStart }) {
-  const deckInfo = deck ? ` · pachet <b>${DECKS[deck].label}</b>` : '';
+// `num_turns` column holds the number of rounds. The deck and the cards per round are the
+// host's choice and only known on the host's device.
+export function renderWaiting(root, { room, me, players, isHost, deck, roundSize, onStart }) {
+  const deckInfo = (deck ? ` · pachet <b>${DECKS[deck].label}</b>` : '')
+    + (roundSize ? ` · ${roundSize} cărți pe rundă` : '');
   root.innerHTML = `
     <section class="panel waiting">
       <h1>Cameră <span class="room-code">${room.code}</span></h1>

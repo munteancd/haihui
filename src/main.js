@@ -2,7 +2,7 @@ import { renderLobby, renderWaiting } from './lobby-ui.js';
 import { renderBoard } from './board-ui.js';
 import { listPlayers, getRoom, startGame, saveState, subscribeRoom, sendChat } from './realtime-sync.js';
 import { mountChat } from './chat-ui.js';
-import { createGame, needsCheckpoint } from './game-state.js';
+import { createGame, needsCheckpoint, ROUND_SIZE } from './game-state.js';
 import { DECKS, DEFAULT_DECK, poolFor } from './decks.js';
 import { isBot, botPlace, botDecideChallenge } from './bot.js';
 
@@ -11,7 +11,7 @@ const loadDeck = (deck) => fetch(DECKS[deck].file).then((r) => r.json());
 
 renderLobby(app, { onEnter: enterRoom, onSolo: startSolo });
 
-function enterRoom({ room, me, isHost, deck = DEFAULT_DECK, difficulty = 'legendar' }) {
+function enterRoom({ room, me, isHost, deck = DEFAULT_DECK, difficulty = 'legendar', roundSize = ROUND_SIZE }) {
   let board = null; // board controller once the game is playing
   let shown = null;  // last game state fetched, so a catch-up refresh doesn't re-render
 
@@ -33,14 +33,14 @@ function enterRoom({ room, me, isHost, deck = DEFAULT_DECK, difficulty = 'legend
       return;
     }
     const players = await listPlayers(room.id);
-    renderWaiting(app, { room: fresh, me, players, isHost, deck: isHost ? deck : null, onStart: start });
+    renderWaiting(app, { room: fresh, me, players, isHost, deck: isHost ? deck : null, roundSize: isHost ? roundSize : null, onStart: start });
   }
 
   async function start() {
     const players = await listPlayers(room.id);
     const data = await loadDeck(deck);
     const state = createGame({
-      variant: room.variant, numRounds: room.num_turns, seed: room.deck_seed, deckId: deck, difficulty,
+      variant: room.variant, numRounds: room.num_turns, roundSize, seed: room.deck_seed, deckId: deck, difficulty,
       players: players.map((p) => ({ id: p.id, name: p.name })),
       cards: poolFor(deck, data, room.variant, difficulty),
     });
@@ -57,12 +57,12 @@ function enterRoom({ room, me, isHost, deck = DEFAULT_DECK, difficulty = 'legend
 
 // Local single-player game against bots. Everything runs on this device: the human plays
 // their turns; a short timer drives each bot's placement and contra decision.
-async function startSolo({ variant, deck, difficulty, numBots, numRounds }) {
+async function startSolo({ variant, deck, difficulty, numBots, numRounds, roundSize }) {
   const data = await loadDeck(deck);
   const players = [{ id: 'you', name: 'Tu' }];
   for (let i = 1; i <= numBots; i++) players.push({ id: `bot${i}`, name: `Bot ${i}`, isBot: true });
   const state = createGame({
-    variant, numRounds, deckId: deck, difficulty, seed: Math.floor(Math.random() * 1e9), players,
+    variant, numRounds, roundSize, deckId: deck, difficulty, seed: Math.floor(Math.random() * 1e9), players,
     cards: poolFor(deck, data, variant, difficulty),
   });
 

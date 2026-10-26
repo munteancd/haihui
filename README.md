@@ -40,8 +40,10 @@ Two variants, chosen at the start:
 - Contra right: the placer gives the contester a 💎 and the card leaves the game. Contra
   wrong: the contester gives the placer a 💎 and both cards stay. A player with no 💎 gives
   nothing; the winner takes one from the bank.
-- A game is **3 rounds of 15 placed cards** (the start card isn't counted; start cards are
-  set aside and never come from the 45-card draw pile). After each round everyone guesses
+- A game is **3 rounds of 15 placed cards** by default (the lobby also offers 1–5 rounds and
+  18, 20 or 25 cards per round; the start card isn't counted; start cards are set aside and
+  never come from the draw pile — 45 cards for 3 × 15). If a small deck runs out first, the
+  round in play is the last. After each round everyone guesses
   how many cards are wrong, blind. Then the board is checked from the start card outward,
   card by card, against the last card still standing; wrong ones are eliminated. Exact
   guess → +2 💎; if nobody is exact, the closest → +1 💎. The board is cleared and the next

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createGame, dealDeck, placeCard, challenge, contestOptions, passChallenge,
   continueAfterContra, needsCheckpoint, resolveCheckpoint, continueAfterCheckpoint,
   wrongOnBoard, cardsThisRound, isGameOver, winners,
-  START_DIAMONDS, ROUND_SIZE } from '../src/game-state.js';
+  START_DIAMONDS, ROUND_SIZE, ROUND_SIZES } from '../src/game-state.js';
 import { isArmInsertCorrect } from '../src/rules-cardinal.js';
 
 // Enough distinct cities for a full game (3 start cards + 45 to place).
@@ -214,6 +214,18 @@ test('a round is 15 placed cards; the start card does not count', () => {
   assert.equal(g.cardsPlayed, 15);
   assert.equal(cardsThisRound(g), 15);
   assert.equal(g.arms.N.length, 15);                 // 15 cards besides the start card
+  assert.equal(needsCheckpoint(g), true);
+});
+
+test('a game can be set to longer rounds: the pile and the scoring follow the round size', () => {
+  assert.deepEqual(ROUND_SIZES, [15, 18, 20, 25]);
+  let g = newGame({ numRounds: 2, roundSize: 20 });
+  assert.equal(g.roundSize, 20);
+  assert.equal(g.deck.cards.length, 40);
+  for (let i = 0; i < 19; i++) g = passAll(placeCard(g, { dir: 'N', index: g.arms.N.length }));
+  assert.equal(needsCheckpoint(g), false);           // 15 is no longer the end of a round
+  g = passAll(placeCard(g, { dir: 'N', index: g.arms.N.length }));
+  assert.equal(cardsThisRound(g), 20);
   assert.equal(needsCheckpoint(g), true);
 });
 
