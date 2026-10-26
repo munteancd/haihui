@@ -4,5 +4,6 @@ export function avatar(name, id) {
   let h = 0;
   for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) % 360;
   const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
-  return `<span class="avatar" style="--h:${h}">${initial}</span>`;
+  const safe = initial.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`); // names are typed by players
+  return `<span class="avatar" style="--h:${h}">${safe}</span>`;
 }

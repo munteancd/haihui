@@ -58,12 +58,20 @@ export async function saveState(roomId, state) {
 
 // Calls onChange on every change to the room or its players, and once more each time the
 // channel (re)subscribes: changes made before it was listening (a quick join) or while the
-// connection was down (a sleeping phone) are never delivered as events.
-export function subscribeRoom(roomId, onChange) {
+// connection was down (a sleeping phone) are never delivered as events. Chat messages from
+// the other players arrive on the same channel as broadcasts (onChat); they are never stored.
+export function subscribeRoom(roomId, onChange, onChat = () => {}) {
   return supabase.channel(`room-${roomId}`)
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` }, onChange)
     .on('postgres_changes',
       { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, onChange)
+    .on('broadcast', { event: 'chat' }, ({ payload }) => onChat(payload))
     .subscribe((status) => { if (status === 'SUBSCRIBED') onChange(); });
+}
+
+// Send a chat message to everyone else on the room's channel (the sender shows its own).
+// Resolves true once the server took it.
+export async function sendChat(channel, message) {
+  return (await channel.send({ type: 'broadcast', event: 'chat', payload: message })) === 'ok';
 }

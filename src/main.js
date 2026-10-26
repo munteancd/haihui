@@ -1,6 +1,7 @@
 import { renderLobby, renderWaiting } from './lobby-ui.js';
 import { renderBoard } from './board-ui.js';
-import { listPlayers, getRoom, startGame, saveState, subscribeRoom } from './realtime-sync.js';
+import { listPlayers, getRoom, startGame, saveState, subscribeRoom, sendChat } from './realtime-sync.js';
+import { mountChat } from './chat-ui.js';
 import { createGame, needsCheckpoint } from './game-state.js';
 import { DECKS, DEFAULT_DECK, poolFor } from './decks.js';
 import { isBot, botPlace, botDecideChallenge } from './bot.js';
@@ -46,7 +47,9 @@ function enterRoom({ room, me, isHost, deck = DEFAULT_DECK, difficulty = 'legend
     await startGame(room.id, state); // realtime update flips everyone to the board
   }
 
-  subscribeRoom(room.id, refresh);
+  let chat = null;
+  const channel = subscribeRoom(room.id, refresh, (msg) => chat?.receive(msg));
+  chat = mountChat({ me, send: (msg) => sendChat(channel, msg) });
   refresh();
   // Back from another app or a locked screen: catch up on anything missed meanwhile.
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
