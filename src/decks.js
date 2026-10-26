@@ -3,8 +3,8 @@
 // `sizes` is how many cards each difficulty plays with (shown in the lobby).
 export const DECKS = {
   romania: { label: 'România', file: 'data/romania.json' },
-  world: { label: 'Lume', file: 'data/cities.json', sizes: [200, 800, 2000, 7740] },
-  europe: { label: 'Europa', file: 'data/europe.json', sizes: [85, 335, 935, 2232] },
+  world: { label: 'Lume', file: 'data/cities.json', sizes: [200, 800, 2000, 7627] },
+  europe: { label: 'Europa', file: 'data/europe.json', sizes: [85, 335, 935, 2226] },
 };
 export const DEFAULT_DECK = 'romania';
 
@@ -14,9 +14,15 @@ export const DIFFICULTY = { usor: 1, mediu: 2, greu: 3, legendar: 4 };
 export const DIFFICULTY_LABELS = { usor: 'Ușor', mediu: 'Mediu', greu: 'Greu', legendar: 'Legendar' };
 export const DEFAULT_DIFFICULTY = 'mediu';
 
-// The cards of a tiered deck up to (and including) `tier`.
+// The cards of a tiered deck up to (and including) `tier`, one card per name: cards show
+// only the name, so where several cities share one (Brest, Alexandria…) the game keeps the
+// best known — the easiest tier, then the most populous.
 export function pickPool(cities, tier) {
-  return cities.filter((c) => (c.tier ?? 4) <= tier);
+  const seen = new Set();
+  return cities
+    .filter((c) => (c.tier ?? 4) <= tier)
+    .sort((a, b) => (a.tier ?? 4) - (b.tier ?? 4) || b.pop - a.pop)
+    .filter((c) => !seen.has(c.name) && seen.add(c.name));
 }
 
 // The cards a game draws from, given the deck's loaded data. Attractions have no

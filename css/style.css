@@ -142,7 +142,6 @@ input::placeholder { color: var(--muted); opacity: .7; }
 .card-face::after { content: ''; position: absolute; inset: 4px; border: 1px dashed rgba(29, 43, 58, .14);
   border-radius: 9px; pointer-events: none; }
 .card-face .cname { font: 800 14px/1.1 var(--font-head); overflow-wrap: anywhere; }
-.card-face .ccountry { font-size: 11px; font-weight: 700; color: #6b7a88; }
 .card-back { background: linear-gradient(155deg, #12968c, #0a5c56); color: #fff; border: 1px solid #0a5c56;
   transform: rotateY(180deg); font-variant-numeric: tabular-nums; gap: 2px; padding: 4px;
   box-shadow: 0 6px 14px rgba(10, 92, 86, .3); }

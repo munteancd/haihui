@@ -6,8 +6,9 @@ import { formatLat, formatLon, formatPop } from './geo-format.js';
 import { LOGO } from './logo.js';
 import { avatar } from './avatar.js';
 
-// World cards carry an ISO country code; show it as a Romanian country name ("EG" → "Egipt")
-// so a name like "Alexandria" isn't ambiguous.
+// World cards carry an ISO country code, shown as a Romanian country name ("EG" → "Egipt")
+// on the card BACK only: on the face it would give the location away. (A game never deals
+// two cards with the same name — see poolFor — so the name alone is never ambiguous.)
 const regionNames = typeof Intl.DisplayNames === 'function' ? new Intl.DisplayNames(['ro'], { type: 'region' }) : null;
 // Shorter forms for names too long for a card.
 const SHORT_COUNTRY = { US: 'SUA', GB: 'Marea Britanie', AE: 'Emiratele Arabe', CD: 'RD Congo',
@@ -93,7 +94,7 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     if (animFlipIds.includes(city.id)) cls.push('flip-anim');
     if (city.id === animPlaceId) cls.push('place-anim');
     return `<div class="${cls.join(' ')}" data-id="${city.id}"${id ? ` id="${id}"` : ''}><div class="card-inner">
-      <div class="card-face">${attraction ? '<span class="kind" title="Obiectiv turistic">★</span>' : ''}<span class="cname">${city.name}</span>${country ? `<span class="ccountry">${country}</span>` : ''}</div>
+      <div class="card-face">${attraction ? '<span class="kind" title="Obiectiv turistic">★</span>' : ''}<span class="cname">${city.name}</span></div>
       <div class="card-back"><span class="bname">${city.name}</span>${region ? `<span class="county">${region}</span>` : ''}${data}</div></div></div>`;
   }
 

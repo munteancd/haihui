@@ -52,9 +52,9 @@ Play with friends via a room code (state syncs through Supabase) or solo against
   towns, with county and population) and 38 tourist attractions (★: castles,
   monasteries, caves, lakes, peaks…), which play in the cardinal variant only. Built from
   the GeoNames dump for Romania by `tools/build-romania.mjs` (see `docs/data.md`).
-- **Lume** — 7 740 world cities, in four difficulties: Ușor plays the 200 best-known
-  (capitals and big cities), Legendar all of them. Cards show the country.
-- **Europa** — 2 232 European cities (Russia up to the Urals, Istanbul and East Thrace),
+- **Lume** — 7 627 world cities, in four difficulties: Ușor plays the 200 best-known
+  (capitals and big cities), Legendar all of them. The country is on the card back.
+- **Europa** — 2 226 European cities (Russia up to the Urals, Istanbul and East Thrace),
   same four difficulties from 85 cities (capitals and 400 000+ cities) up.
 
 Geographic data © GeoNames (CC BY 4.0), credited in the app footer.
