@@ -30,7 +30,7 @@ test('România population plays cities only (attractions have no population)', (
 });
 
 test('Lume and Europa play the cards up to the chosen difficulty tier', () => {
-  const deck = [1, 1, 2, 3, 4, 4].map((tier, id) => ({ id, tier, pop: 1000 }));
+  const deck = [1, 1, 2, 3, 4, 4].map((tier, id) => ({ id, name: `City ${id}`, tier, pop: 1000 }));
   for (const id of ['world', 'europe']) {
     assert.equal(poolFor(id, deck, 'cardinal', 'usor').length, 2);
     assert.equal(poolFor(id, deck, 'population', 'mediu').length, 3);
@@ -40,11 +40,23 @@ test('Lume and Europa play the cards up to the chosen difficulty tier', () => {
   assert.deepEqual(pickPool(deck, 1).map((c) => c.id), [0, 1]);
 });
 
+test('a game never deals two cards with the same name: the best-known one stays', () => {
+  const deck = [
+    { id: 1, name: 'Brest', tier: 3, pop: 1e5 },   // France
+    { id: 2, name: 'Brest', tier: 2, pop: 3e5 },   // Belarus, easier tier
+    { id: 3, name: 'Alexandria', tier: 4, pop: 5e4 },
+    { id: 4, name: 'Alexandria', tier: 4, pop: 5e6 },
+    { id: 5, name: 'Paris', tier: 1, pop: 2e6 },
+  ];
+  assert.deepEqual(poolFor('europe', deck, 'cardinal', 'legendar').map((c) => c.id).sort(), [2, 4, 5]);
+  assert.deepEqual(poolFor('europe', deck, 'cardinal', 'greu').map((c) => c.id).sort(), [2, 5]);
+});
+
 // The lobby shows DECKS[…].sizes; they must match what the build put in the data.
 for (const id of ['world', 'europe']) {
   test(`the committed ${DECKS[id].label} deck matches its tier sizes and is well-formed`, () => {
     const data = JSON.parse(readFileSync(new URL(`../${DECKS[id].file}`, import.meta.url), 'utf8'));
-    const sizes = [1, 2, 3, 4].map((t) => data.filter((c) => c.tier <= t).length);
+    const sizes = [1, 2, 3, 4].map((t) => pickPool(data, t).length);
     assert.deepEqual(sizes, DECKS[id].sizes);
     assert.equal(new Set(data.map((c) => c.id)).size, data.length);
     for (const c of data) {

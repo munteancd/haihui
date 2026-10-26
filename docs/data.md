@@ -30,8 +30,10 @@ the ISO code (the app shows it in Romanian), `tier` the easiest difficulty the c
   country for Lume (6 for Europa, which also needs 400 000+ people outside the capitals).
   Tiers 2 and 3 relax the limits; the rest is tier 4
   (Legendar). A name already used in an easier tier waits for a harder one, so an easy game
-  never has two "Alexandria"s. Today: Lume 200 / 800 / 2 000 / 7 740 cards cumulatively,
-  Europa 85 / 335 / 935 / 2 232. `DECKS.sizes` in `src/decks.js` must match (a test checks).
+  never has two "Alexandria"s; and a game deals one card per name in any case (`pickPool`,
+  keeping the best-known), since the face shows only the name. Today the four levels deal
+  Lume 200 / 800 / 2 000 / 7 627 cards,
+  Europa 85 / 335 / 935 / 2 226. `DECKS.sizes` in `src/decks.js` must match (a test checks).
 - Names are GeoNames' main names, with Romanian spelling for Romania and Moldova
   (comma-below ș/ț, București, Chișinău).
 
