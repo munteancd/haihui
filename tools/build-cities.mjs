@@ -4,11 +4,18 @@
 // Usage:
 //   node tools/build-cities.mjs                  # downloads cities500.zip from GeoNames
 //   node tools/build-cities.mjs <cities500.txt>  # use an already unzipped dump
+//   node tools/build-cities.mjs <cities500.txt> <alternateNamesV2.txt>   # + Romanian names
+//
+// The second file gives cities outside Romania their Romanian name (Viena, Varșovia,
+// Londra). It is GeoNames' alternateNamesV2.txt (in alternateNamesV2.zip, ~800 MB unzipped),
+// or just its Romanian lines:  unzip -p alternateNamesV2.zip alternateNamesV2.txt |
+// awk -F'\t' '$3=="ro"' > alt-ro.txt   — without it the cards keep GeoNames' main names.
 //
 // Each card: { id (GeoNames id), name, country (ISO code), lat, lon, pop, tier }. `tier` is
 // the easiest difficulty the card plays at (1 Ușor … 4 Legendar); see TIERS.
 // Coordinates are never typed in by hand — everything comes from the dump.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, createReadStream } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 import { unzipEntry, cleanName } from './build-romania.mjs';
 
@@ -111,18 +118,64 @@ export function assignTiers(cities, tiers) {
   return cities.map((c) => ({ ...c, tier: tierOf.get(c) ?? tiers.length + 1 }));
 }
 
-// Romanian and Moldovan names get Romanian spelling (comma-below ș/ț, București).
-const cardName = (c) => (c.country === 'RO' || c.country === 'MD' ? cleanName(c.name) : c.name);
+// Romanian names from GeoNames' alternate names: the `ro` lines of alternateNamesV2.txt
+// (columns: id, geonameid, isolanguage, name, isPreferredName, isShortName, isColloquial,
+// isHistoric, …), as geonameid -> candidate entries.
+export function romanianNames(lines) {
+  const out = new Map();
+  for (const line of lines) {
+    const f = line.split('\t');
+    if (f[2] !== 'ro') continue;
+    const id = Number(f[1]);
+    if (!out.has(id)) out.set(id, []);
+    out.get(id).push({ name: f[3], preferred: f[4] === '1', short: f[5] === '1', colloquial: f[6] === '1', historic: f[7] === '1' });
+  }
+  return out;
+}
 
-export function buildDeck(rows, deck) {
-  const cities = assignTiers(pickPerCountry(rows.filter(deck.filter), deck.perCountry), deck.tiers);
+// Latin letters plus the diacritics Romanian readers know; GeoNames' Romanian list also has
+// Moldovan Cyrillic spellings and pinyin tone marks, which a card should not show.
+const READABLE = /^[A-Za-z0-9 .'’()-ăâîșțşţĂÂÎȘȚŞŢáàäéèëêíïóöôúüûñçõãåøæœßÁÀÄÉÈÊÍÓÖÔÚÜÑÇ]+$/;
+// Where GeoNames' Romanian name is outdated, the one Romanian sources use today.
+const RO_NAME_FIXES = { Mumbay: 'Mumbai', Szeghed: 'Seghedin' };
+
+// The Romanian name to print for a city, or its GeoNames name when there is none: the
+// preferred Romanian entry, else a plain one (not historic, colloquial or short).
+export function pickRomanianName(name, entries = []) {
+  const usable = entries.filter((e) => !e.historic && !e.colloquial && READABLE.test(e.name));
+  const pick = usable.find((e) => e.preferred) ?? usable.find((e) => !e.short) ?? usable[0];
+  if (!pick) return name;
+  const ro = cleanName(pick.name);
+  return RO_NAME_FIXES[ro] ?? ro;
+}
+
+// Romanian and Moldovan names get Romanian spelling (comma-below ș/ț, București); other
+// cities their Romanian name when GeoNames has one.
+function cardName(c, roNames) {
+  if (c.country === 'RO' || c.country === 'MD') return cleanName(c.name);
+  return pickRomanianName(c.name, roNames.get(c.id));
+}
+
+// Cards are named before cities are picked, so "one card per name" works on what is shown.
+export function buildDeck(rows, deck, roNames = new Map()) {
+  const named = rows.filter(deck.filter).map((r) => ({ ...r, name: cardName(r, roNames) }));
+  const cities = assignTiers(pickPerCountry(named, deck.perCountry), deck.tiers);
   return cities
     .sort((a, b) => a.tier - b.tier || b.pop - a.pop)
-    .map((c) => ({ id: c.id, name: cardName(c), country: c.country, lat: c.lat, lon: c.lon, pop: c.pop, tier: c.tier }));
+    .map((c) => ({ id: c.id, name: c.name, country: c.country, lat: c.lat, lon: c.lon, pop: c.pop, tier: c.tier }));
+}
+
+// Stream the (large) alternate-names file, keeping the Romanian lines only.
+async function readRomanianNames(path) {
+  const lines = [];
+  for await (const line of createInterface({ input: createReadStream(path), crlfDelay: Infinity })) {
+    if (line.includes('\tro\t')) lines.push(line);
+  }
+  return romanianNames(lines);
 }
 
 async function main() {
-  const [inPath] = process.argv.slice(2);
+  const [inPath, altPath] = process.argv.slice(2);
   let text;
   if (inPath) {
     text = readFileSync(inPath, 'utf8');
@@ -133,8 +186,10 @@ async function main() {
     text = unzipEntry(Buffer.from(await res.arrayBuffer()), 'cities500.txt');
   }
   const rows = text.split('\n').filter(Boolean).map(parseRow);
+  const roNames = altPath ? await readRomanianNames(altPath) : new Map();
+  if (!altPath) console.warn('no alternate-names file given: cards keep GeoNames main names (see the header)');
   for (const [id, deck] of Object.entries(DECKS)) {
-    const cards = buildDeck(rows, deck);
+    const cards = buildDeck(rows, deck, roNames);
     writeFileSync(deck.out, `${JSON.stringify(cards)}\n`);
     const perTier = [1, 2, 3, 4].map((t) => cards.filter((c) => c.tier === t).length);
     console.log(`${id}: ${cards.length} cities from ${new Set(cards.map((c) => c.country)).size} countries, per tier ${perTier.join('/')} -> ${deck.out}`);

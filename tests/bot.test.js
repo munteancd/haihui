@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, placeCard } from '../src/game-state.js';
-import { isBot, botPlace, botDecideChallenge, botEstimate } from '../src/bot.js';
+import { isArmInsertCorrect } from '../src/rules-cardinal.js';
+import { isBot, botPlace, botDecideChallenge, botEstimate, botNames, BOT_LEVELS, BOT_NAMES } from '../src/bot.js';
 
 const cities = Array.from({ length: 30 }, (_, i) => ({
   id: i + 1, name: `C${i + 1}`, lat: 43 + (i % 7), lon: 21 + ((i * 3) % 8), pop: 100 + i * 50,
@@ -58,4 +59,56 @@ test('botEstimate is a small non-negative number', () => {
   const g = botPlace(createGame({ variant: 'population', seed: 3, players, cards: cities }));
   const e = botEstimate(g);
   assert.ok(Number.isInteger(e) && e >= 0 && e <= 1);
+});
+
+// Run `fn` with Math.random pinned to `value`.
+function withRandom(value, fn) {
+  const real = Math.random;
+  Math.random = () => value;
+  try { return fn(); } finally { Math.random = real; }
+}
+
+// A cardinal game where `level`'s bot is about to act: anchor 45 on a hand-built N arm.
+function levelGame(level, armLats, drawLat) {
+  const anchor = { id: 100, name: 'A', lat: 45, lon: 25, pop: 1 };
+  const c = (id, lat) => ({ id, name: `X${id}`, lat, lon: 25, pop: 1 });
+  const ps = [{ id: 'b1', name: 'Bot', isBot: true, level }, { id: 'you', name: 'Tu' }];
+  const g = createGame({ variant: 'cardinal', seed: 3, players: ps, cards: cities });
+  return { ...g, placements: [{ playerId: null, city: anchor, dir: null, index: null }],
+    arms: { N: armLats.map((lat, i) => c(i + 1, lat)), S: [], E: [], V: [] },
+    deck: { cards: [c(50, drawLat)], pos: 0 } };
+}
+
+test('bot levels: the same roll places correctly for an expert and wrongly for an easy bot', () => {
+  assert.deepEqual(Object.keys(BOT_LEVELS), ['usor', 'mediu', 'greu', 'expert']);
+  const placedRight = (level) => withRandom(0.6, () => {
+    const before = levelGame(level, [50, 55], 52);
+    const after = botPlace(before);
+    const p = after.placements[after.lastMove.placementIndex];
+    return isArmInsertCorrect(before.arms[p.dir], before.placements[0].city, p.dir, p.index, p.city);
+  });
+  assert.equal(placedRight('expert'), true);
+  assert.equal(placedRight('usor'), false);
+});
+
+test('bot levels: an easy bot lets a wrong card go where a hard one contests it', () => {
+  // the card at 57 sits between 50 and 55: wrong
+  const wrongPlaced = (level) => {
+    const g = levelGame(level, [50, 55], 57);
+    const ps = [g.players[1], g.players[0]];               // the human places, the bot judges
+    return placeCard({ ...g, players: ps, currentPlayerIndex: 0 }, { dir: 'N', index: 1 });
+  };
+  assert.equal(withRandom(0.5, () => botDecideChallenge(wrongPlaced('usor'))).phase, 'placing');
+  assert.equal(withRandom(0.5, () => botDecideChallenge(wrongPlaced('greu'))).phase, 'contra_result');
+});
+
+test('an expert bot guesses the true number of wrong cards', () => {
+  const g = { ...levelGame('expert', [50, 48, 60], 70), cardsPlayed: 15 }; // 48 is wrong
+  assert.equal(botEstimate(g, g.players[0]), 1);
+});
+
+test('bots get different funny names', () => {
+  const names = botNames(5);
+  assert.equal(new Set(names).size, 5);
+  assert.ok(names.every((n) => BOT_NAMES.includes(n)));
 });

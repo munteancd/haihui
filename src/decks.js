@@ -3,7 +3,7 @@
 // `sizes` is how many cards each difficulty plays with (shown in the lobby).
 export const DECKS = {
   romania: { label: 'România', file: 'data/romania.json' },
-  world: { label: 'Lume', file: 'data/cities.json', sizes: [200, 800, 2000, 7627] },
+  world: { label: 'Lume', file: 'data/cities.json', sizes: [200, 800, 2000, 7622] },
   europe: { label: 'Europa', file: 'data/europe.json', sizes: [85, 335, 935, 2226] },
 };
 export const DEFAULT_DECK = 'romania';

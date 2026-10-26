@@ -73,7 +73,7 @@ test('the Europa deck stays in Europe', () => {
   const data = JSON.parse(readFileSync(new URL('../data/europe.json', import.meta.url), 'utf8'));
   for (const c of data) assert.ok(c.lat > 27 && c.lat < 72 && c.lon > -32 && c.lon < 60, `${c.name} (${c.country})`);
   const names = new Set(data.filter((c) => c.tier === 1).map((c) => c.name));
-  for (const n of ['Paris', 'London', 'Berlin', 'Rome', 'București', 'Chișinău', 'Istanbul']) assert.ok(names.has(n), n);
+  for (const n of ['Paris', 'Londra', 'Berlin', 'Roma', 'Varșovia', 'București', 'Chișinău', 'Istanbul']) assert.ok(names.has(n), n);
 });
 
 test('the committed România deck is real-sized and well-formed', () => {

@@ -115,7 +115,7 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
     const curId = current.players[current.currentPlayerIndex].id;
     const chips = current.players.map((p) => `
       <span class="pchip pscore${turn && p.id === curId ? ' turn' : ''}" data-p="${p.id}">
-        ${avatar(p.name, p.id)}<span>${p.name}${p.id === myId && p.name !== 'Tu' ? ' <span class="you">(tu)</span>' : ''}</span>
+        ${avatar(p.name, p.id)}<span>${p.name}${isBot(p) ? ' 🤖' : ''}${p.id === myId && p.name !== 'Tu' ? ' <span class="you">(tu)</span>' : ''}</span>
         <span class="dcount">💎 ${p.diamonds}</span>${turn && p.id === curId ? '<span class="tag">la rând</span>' : ''}
       </span>`).join('');
     const placed = Math.min(cardsThisRound(current), current.roundSize);
@@ -404,7 +404,7 @@ export function renderBoard(root, { state, myId, isHost = false, onAction = () =
       ${current.players.map((p) => {
         const bot = isBot(p);
         return `<label>${p.name}${bot ? ' 🤖' : ''} <input data-p="${p.id}" type="number" min="0"
-          value="${bot ? botEstimate(current) : 0}"${bot ? ' disabled' : ''} /></label>`;
+          value="${bot ? botEstimate(current, p) : 0}"${bot ? ' disabled' : ''} /></label>`;
       }).join('')}
       <button id="score">Punctează</button></div></div>`;
     root.querySelector('#score').onclick = () => {

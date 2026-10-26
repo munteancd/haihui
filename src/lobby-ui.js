@@ -3,6 +3,7 @@ import { DECKS, DEFAULT_DECK, DIFFICULTY_LABELS, DEFAULT_DIFFICULTY } from './de
 import { DEFAULT_ROUNDS, ROUND_SIZE, ROUND_SIZES } from './game-state.js';
 import { LOGO } from './logo.js';
 import { avatar } from './avatar.js';
+import { BOT_LEVELS, DEFAULT_BOT_LEVEL } from './bot.js';
 
 const VARIANTS = `<option value="cardinal">Puncte cardinale</option><option value="population">Populație</option>`;
 const DECK_OPTIONS = Object.entries(DECKS).map(([id, d]) =>
@@ -20,6 +21,8 @@ function difficultyOptions(deckId, selected = DEFAULT_DIFFICULTY) {
   }).join('');
 }
 const DIFFICULTIES = difficultyOptions(DEFAULT_DECK);
+const BOT_LEVEL_OPTIONS = Object.entries(BOT_LEVELS).map(([id, l]) =>
+  `<option value="${id}"${id === DEFAULT_BOT_LEVEL ? ' selected' : ''}>${l.label}</option>`).join('');
 const ROUND_SIZE_OPTIONS = ROUND_SIZES.map((n) =>
   `<option value="${n}"${n === ROUND_SIZE ? ' selected' : ''}>${n} cărți</option>`).join('');
 
@@ -40,8 +43,8 @@ const HOW_TO = `
   </ol>`;
 
 // Create/join screen. `onEnter({ room, me, isHost, deck, difficulty, roundSize })` runs once
-// this device is in a multiplayer room; `onSolo({ variant, deck, difficulty, numBots, numRounds,
-// roundSize })`
+// this device is in a multiplayer room; `onSolo({ variant, deck, difficulty, numBots, botLevel,
+// numRounds, roundSize })`
 // starts a local game against bots (no other players needed).
 export function renderLobby(root, { onEnter, onSolo }) {
   root.innerHTML = `
@@ -82,6 +85,7 @@ export function renderLobby(root, { onEnter, onSolo }) {
           <label>Pachet <select id="solo-deck">${DECK_OPTIONS}</select></label>
           <label>Dificultate <select id="solo-difficulty">${DIFFICULTIES}</select></label>
           <label>Boți <input id="solo-bots" type="number" value="2" min="1" max="5" /></label>
+          <label>Nivel boți <select id="solo-bot-level">${BOT_LEVEL_OPTIONS}</select></label>
           <label>Runde <input id="solo-rounds" type="number" value="${DEFAULT_ROUNDS}" min="1" max="5" /></label>
           <label>Cărți pe rundă <select id="solo-round-size">${ROUND_SIZE_OPTIONS}</select></label>
         </div>
@@ -139,7 +143,8 @@ export function renderLobby(root, { onEnter, onSolo }) {
       variant: val('#solo-variant'),
       deck: val('#solo-deck'),
       difficulty: val('#solo-difficulty'),
-      numBots: Number(val('#solo-bots')),
+      numBots: Math.min(5, Math.max(1, Math.round(Number(val('#solo-bots'))) || 2)),
+      botLevel: val('#solo-bot-level'),
       numRounds: rounds('#solo-rounds'),
       roundSize: Number(val('#solo-round-size')),
     });
