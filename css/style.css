@@ -203,9 +203,11 @@ input::placeholder { color: var(--muted); opacity: .7; }
   border-radius: 20px; border: 2px solid var(--table-edge);
   background: linear-gradient(to top, rgba(14, 124, 116, .1), rgba(242, 106, 75, .12)); }
 
-/* Cards knocked off the board by a successful contra. */
-.discard { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px;
-  padding-top: 12px; border-top: 2px dashed var(--line); font-size: 13px; font-weight: 700; color: var(--muted); }
+/* Cards knocked off the board by a successful contra. Pinned to the left edge of #board so it
+   stays whole when a wide board is scrolled sideways. */
+.discard { position: sticky; left: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-top: 16px; padding-top: 12px; border-top: 2px dashed var(--line); font-size: 13px; font-weight: 700;
+  color: var(--muted); }
 
 /* Drag and drop zones */
 .card.draggable { touch-action: none; cursor: grab; }
@@ -301,4 +303,41 @@ input::placeholder { color: var(--muted); opacity: .7; }
   .card.pick { box-shadow: 0 0 0 4px var(--gold); }
   /* still show the last-card ring, just without the pulsing */
   .card.last { box-shadow: 0 0 0 3px var(--accent), 0 0 14px rgba(242, 106, 75, .8); }
+}
+
+/* Room chat: a floating button (and its panel) outside #app, bottom right. */
+#chat { position: fixed; right: 16px; bottom: 16px; z-index: 50; display: flex; flex-direction: column;
+  align-items: flex-end; gap: 8px; }
+#chat [hidden] { display: none !important; }
+.chat-toggle { position: relative; width: 56px; height: 56px; padding: 0; border-radius: 50%; font-size: 24px;
+  background: var(--teal); box-shadow: 0 3px 0 var(--teal-2), var(--shadow); }
+.chat-badge { position: absolute; top: -4px; right: -4px; min-width: 22px; height: 22px; padding: 0 6px;
+  border-radius: 99px; background: var(--accent); color: #fff; font: 800 12px/22px var(--font-body); }
+.chat-peek { max-width: 260px; padding: 8px 12px; border-radius: 14px 14px 4px 14px; background: var(--paper);
+  border: 2px solid var(--line); box-shadow: var(--shadow); font-size: 14px; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-panel { width: min(340px, calc(100vw - 32px)); height: min(440px, calc(100vh - 120px)); display: flex;
+  flex-direction: column; background: var(--paper); border: 2px solid var(--line); border-radius: 20px;
+  box-shadow: var(--shadow); overflow: hidden; }
+.chat-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 8px 16px;
+  border-bottom: 1px solid var(--line); font-family: var(--font-head); font-size: 17px; }
+.chat-close { padding: 4px 10px; }
+.chat-log { list-style: none; margin: 0; padding: 12px; flex: 1; overflow-y: auto; display: flex;
+  flex-direction: column; gap: 8px; }
+.chat-log li { display: flex; gap: 8px; align-items: flex-end; }
+.chat-log li.mine { flex-direction: row-reverse; }
+.chat-log .avatar { width: 26px; height: 26px; font-size: 13px; flex: 0 0 auto; }
+.bubble { max-width: 80%; padding: 6px 10px; border-radius: 14px; background: var(--paper-2); display: flex;
+  flex-direction: column; overflow-wrap: anywhere; }
+.mine .bubble { background: var(--teal); color: #fff; }
+.bubble .who { font-size: 11px; font-weight: 800; opacity: .75; }
+.chat-log li.failed .bubble { opacity: .5; }
+.chat-log li.failed .bubble::after { content: 'nu s-a trimis'; font-size: 11px; font-style: italic; }
+.chat-empty { color: var(--muted); font-size: 13px; justify-content: center; text-align: center; }
+.chat-form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); }
+.chat-form input { flex: 1; }
+.chat-form button { padding: 10px 14px; }
+/* keep the bottom-sticky panels clear of the chat button where they would run under it */
+@media (max-width: 1400px) {
+  body:has(#chat) #controls:not(:empty), body:has(#chat) .result { margin-right: 66px; }
 }

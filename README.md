@@ -12,6 +12,8 @@ board game's publishers.
 - **Singur:** la „Solo cu boți” alegi varianta și apeși **Începe**.
 - **Cu prietenii:** unul apasă **Creează** la „Cameră nouă” și le dă celorlalți codul de 4
   litere. Ceilalți îl scriu la „Intră cu cod”. Când sunt toți, gazda apasă **Start joc**.
+  În cameră aveți și un **chat** (butonul 💬 din dreapta jos). Mesajele nu se păstrează:
+  după o reîncărcare a paginii, chatul pornește gol.
 - **Pachetul:** România (orașe și obiective turistice), Lume sau Europa. La Lume și Europa
   alegi și dificultatea: Ușor are doar capitale și orașe mari, cunoscute; Legendar le are
   pe toate.
@@ -74,7 +76,8 @@ Where things live:
 - `src/game-state.js` — the game as pure state transitions (turns, contra, rounds, scoring);
   `src/rules-cardinal.js` / `src/rules-population.js` — what counts as correct.
 - `src/board-ui.js`, `src/lobby-ui.js` — the screens; `src/main.js` wires solo and rooms.
-- `src/bot.js` — the solo bots; `src/realtime-sync.js` — Supabase rooms.
+- `src/bot.js` — the solo bots; `src/realtime-sync.js` — Supabase rooms (state + chat
+  broadcasts); `src/chat-ui.js` — the room chat panel.
 - `src/decks.js` — deck choice; `data/` — the card data, built by `tools/`.
 - `css/style.css` — the look: colour tokens at the top (light, plus a dark-mode block),
   then components; `src/logo.js` / `icon.svg` — the compass logo.
