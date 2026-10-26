@@ -3,16 +3,17 @@ import { armNeighbours, isContestedPairCorrect as isArmPairCorrect, wrongCards }
 import { lineNeighbours, isContestedPairCorrect as isLinePairCorrect, wrongCardsPopulation } from './rules-population.js';
 
 export const START_DIAMONDS = 4;
-export const ROUND_SIZE = 15;      // cards placed per round (the start card not counted)
+export const ROUND_SIZE = 15;      // cards placed per round by default (the start card not counted)
+export const ROUND_SIZES = [15, 18, 20, 25]; // the round lengths the lobby offers
 export const DEFAULT_ROUNDS = 3;
 
 // Shuffle the pool and split it into the set-aside start cards (one per round) and the
-// draw pile (ROUND_SIZE cards per round). Start cards never come out of the draw pile.
-export function dealDeck(pool, numRounds, seed) {
+// draw pile (`roundSize` cards per round). Start cards never come out of the draw pile.
+export function dealDeck(pool, numRounds, seed, roundSize = ROUND_SIZE) {
   const shuffled = shuffle(pool, seed);
   return {
     startCards: shuffled.slice(0, numRounds),
-    cards: shuffled.slice(numRounds, numRounds + numRounds * ROUND_SIZE),
+    cards: shuffled.slice(numRounds, numRounds + numRounds * roundSize),
   };
 }
 
@@ -30,12 +31,12 @@ function freshBoard(variant, anchor) {
 }
 
 // Build a fresh game from `cards` (the deck's pool for this variant).
-export function createGame({ variant, numRounds = DEFAULT_ROUNDS, seed, players, cards, deckId = null, difficulty = null }) {
-  const { startCards, cards: pile } = dealDeck(cards, numRounds, seed);
+export function createGame({ variant, numRounds = DEFAULT_ROUNDS, roundSize = ROUND_SIZE, seed, players, cards, deckId = null, difficulty = null }) {
+  const { startCards, cards: pile } = dealDeck(cards, numRounds, seed, roundSize);
   return {
     variant,
     numRounds,
-    roundSize: ROUND_SIZE,
+    roundSize,
     seed,
     deckId,
     difficulty,
