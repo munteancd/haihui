@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { inEurope, pickPerCountry, assignTiers, buildDeck, distanceKm, parseRow } from '../tools/build-cities.mjs';
+import { inEurope, pickPerCountry, assignTiers, buildDeck, distanceKm, parseRow, romanianNames, pickRomanianName } from '../tools/build-cities.mjs';
 
 // A minimal row as parseRow() returns it.
 const city = (id, name, country, pop, { lat = 45, lon = 25, fcode = 'PPL', names = 30 } = {}) =>
@@ -58,4 +58,29 @@ test('a built deck lists cards easiest first, with Romanian spelling for RO/MD n
   const deck = buildDeck(rows, { perCountry: 5, filter: () => true, tiers: [{ size: 1, cap: 1, minNames: 1, capitalPop: 0 }] });
   assert.deepEqual(deck.map((c) => [c.name, c.tier]), [['Chișinău', 1], ['Iași', 2]]);
   assert.deepEqual(Object.keys(deck[0]), ['id', 'name', 'country', 'lat', 'lon', 'pop', 'tier']);
+});
+
+test('Romanian names: the preferred readable one, else the GeoNames name', () => {
+  const lines = [
+    '1\t524901\tro\tМосква\t\t\t\t\t\t',            // Moldovan Cyrillic: not for a card
+    '2\t524901\tro\tMoscova\t1\t\t\t\t\t',
+    '3\t2761369\tro\tViena\t\t\t\t\t\t',
+    '4\t1790630\tro\tXī\'ān\t\t\t\t\t\t',           // pinyin tone marks: skipped
+    '5\t1275339\tro\tMumbay\t\t\t\t\t\t',           // outdated: fixed
+    '6\t9999\ten\tSomething\t\t\t\t\t\t',            // another language
+  ];
+  const ro = romanianNames(lines);
+  assert.equal(pickRomanianName('Moscow', ro.get(524901)), 'Moscova');
+  assert.equal(pickRomanianName('Vienna', ro.get(2761369)), 'Viena');
+  assert.equal(pickRomanianName('Xi’an', ro.get(1790630)), 'Xi’an');
+  assert.equal(pickRomanianName('Mumbai', ro.get(1275339)), 'Mumbai');
+  assert.equal(pickRomanianName('Paris', ro.get(2988507)), 'Paris');
+  assert.equal(ro.has(9999), false);
+});
+
+test('a deck is built with the Romanian names on its cards', () => {
+  const rows = [city(2761369, 'Vienna', 'AT', 2e6, { fcode: 'PPLC' })];
+  const ro = romanianNames(['3\t2761369\tro\tViena\t1\t\t\t\t\t']);
+  const deck = buildDeck(rows, { perCountry: 5, filter: () => true, tiers: [{ size: 1, cap: 1, minNames: 1, capitalPop: 0 }] }, ro);
+  assert.equal(deck[0].name, 'Viena');
 });

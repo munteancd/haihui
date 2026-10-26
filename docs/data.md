@@ -12,6 +12,7 @@ every populated place with 500+ people. `tools/build-cities.mjs` builds both dec
 ```
 node tools/build-cities.mjs                  # downloads cities500.zip from GeoNames itself
 node tools/build-cities.mjs path/to/cities500.txt
+node tools/build-cities.mjs path/to/cities500.txt path/to/alternateNamesV2.txt  # + Romanian names
 ```
 
 Each card: `{ id, name, country, lat, lon, pop, tier }` — `id` is the GeoNames id, `country`
@@ -32,10 +33,19 @@ the ISO code (the app shows it in Romanian), `tier` the easiest difficulty the c
   (Legendar). A name already used in an easier tier waits for a harder one, so an easy game
   never has two "Alexandria"s; and a game deals one card per name in any case (`pickPool`,
   keeping the best-known), since the face shows only the name. Today the four levels deal
-  Lume 200 / 800 / 2 000 / 7 627 cards,
+  Lume 200 / 800 / 2 000 / 7 622 cards,
   Europa 85 / 335 / 935 / 2 226. `DECKS.sizes` in `src/decks.js` must match (a test checks).
-- Names are GeoNames' main names, with Romanian spelling for Romania and Moldova
-  (comma-below ș/ț, București, Chișinău).
+- **Names** are Romanian. Romania and Moldova: GeoNames' name with comma-below ș/ț
+  (București, Chișinău). Elsewhere: the Romanian name GeoNames lists for the city in
+  `alternateNamesV2.txt` (language `ro`) — Viena, Varșovia, Londra, Anvers, Tokio — taking
+  the one marked preferred, else a plain one (not historic, colloquial or short), and only
+  if it is written in Latin letters with diacritics a Romanian reader knows (the list also
+  holds Moldovan Cyrillic and pinyin with tone marks). Two outdated entries are corrected in
+  `RO_NAME_FIXES` (Mumbay → Mumbai, Szeghed → Seghedin). A city without a usable Romanian
+  name keeps GeoNames' main name. The October 2026 file gives about 1 000 of the deck cities
+  a Romanian name; ~300 differ from the main name. The alternate-names zip is ~200 MB
+  (~800 MB unzipped): the script streams it, or takes just its Romanian lines
+  (`unzip -p alternateNamesV2.zip alternateNamesV2.txt | awk -F'\t' '$3=="ro"'`).
 
 Columns used (0-indexed) from the GeoNames dump: 0 id, 1 name, 3 alternate names (only
 counted), 4 latitude, 5 longitude, 7 feature code, 8 country code, 14 population.
