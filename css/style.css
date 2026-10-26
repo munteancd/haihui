@@ -203,9 +203,11 @@ input::placeholder { color: var(--muted); opacity: .7; }
   border-radius: 20px; border: 2px solid var(--table-edge);
   background: linear-gradient(to top, rgba(14, 124, 116, .1), rgba(242, 106, 75, .12)); }
 
-/* Cards knocked off the board by a successful contra. */
-.discard { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px;
-  padding-top: 12px; border-top: 2px dashed var(--line); font-size: 13px; font-weight: 700; color: var(--muted); }
+/* Cards knocked off the board by a successful contra. Pinned to the left edge of #board so it
+   stays whole when a wide board is scrolled sideways. */
+.discard { position: sticky; left: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-top: 16px; padding-top: 12px; border-top: 2px dashed var(--line); font-size: 13px; font-weight: 700;
+  color: var(--muted); }
 
 /* Drag and drop zones */
 .card.draggable { touch-action: none; cursor: grab; }
