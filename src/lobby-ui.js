@@ -1,5 +1,5 @@
 import { createRoom, joinRoom } from './realtime-sync.js';
-import { DECKS, DEFAULT_DECK } from './decks.js';
+import { DECKS, DEFAULT_DECK, DIFFICULTY_LABELS, DEFAULT_DIFFICULTY } from './decks.js';
 import { DEFAULT_ROUNDS } from './game-state.js';
 import { LOGO } from './logo.js';
 import { avatar } from './avatar.js';
@@ -7,11 +7,19 @@ import { avatar } from './avatar.js';
 const VARIANTS = `<option value="cardinal">Puncte cardinale</option><option value="population">Populație</option>`;
 const DECK_OPTIONS = Object.entries(DECKS).map(([id, d]) =>
   `<option value="${id}"${id === DEFAULT_DECK ? ' selected' : ''}>${d.label}</option>`).join('');
-const DIFFICULTIES = `
-  <option value="usor">Ușor (~200 orașe cunoscute)</option>
-  <option value="mediu">Mediu (~800)</option>
-  <option value="greu">Greu (~2000)</option>
-  <option value="legendar" selected>Legendar (toate)</option>`;
+// Difficulty options for a deck, with how many cities each one plays ("Ușor (100 de orașe)").
+// România has no tiers: it gets one placeholder option and the select is disabled.
+function difficultyOptions(deckId, selected = DEFAULT_DIFFICULTY) {
+  const sizes = DECKS[deckId].sizes;
+  if (!sizes) return '<option value="legendar">Toate cărțile</option>';
+  return Object.entries(DIFFICULTY_LABELS).map(([id, label], i) => {
+    const n = sizes[i];
+    const what = i === 0 ? 'cele mai cunoscute' : i === sizes.length - 1 ? 'toate' : '';
+    const de = n % 100 === 0 || n % 100 >= 20 ? ' de' : ''; // "100 de orașe", "101 orașe"
+    return `<option value="${id}"${id === selected ? ' selected' : ''}>${label} (${n.toLocaleString('ro-RO')}${de} orașe${what ? `, ${what}` : ''})</option>`;
+  }).join('');
+}
+const DIFFICULTIES = difficultyOptions(DEFAULT_DECK);
 
 // The rules in a nutshell, in our own words.
 const HOW_TO = `
@@ -86,9 +94,16 @@ export function renderLobby(root, { onEnter, onSolo }) {
     box.hidden = !box.hidden;
   };
 
-  // Difficulty tiers only exist for the world deck.
+  // Difficulty tiers exist for Lume and Europa; switching decks keeps the chosen level.
   const linkDifficulty = (deckSel, diffSel) => {
-    const sync = () => { root.querySelector(diffSel).disabled = val(deckSel) !== 'world'; };
+    const select = root.querySelector(diffSel);
+    let chosen = DEFAULT_DIFFICULTY;
+    select.onchange = () => { chosen = select.value; };
+    const sync = () => {
+      const deck = val(deckSel);
+      select.innerHTML = difficultyOptions(deck, chosen);
+      select.disabled = !DECKS[deck].sizes;
+    };
     root.querySelector(deckSel).onchange = sync;
     sync();
   };

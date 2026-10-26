@@ -12,6 +12,9 @@ board game's publishers.
 - **Singur:** la „Solo cu boți” alegi varianta și apeși **Începe**.
 - **Cu prietenii:** unul apasă **Creează** la „Cameră nouă” și le dă celorlalți codul de 4
   litere. Ceilalți îl scriu la „Intră cu cod”. Când sunt toți, gazda apasă **Start joc**.
+- **Pachetul:** România (orașe și obiective turistice), Lume sau Europa. La Lume și Europa
+  alegi și dificultatea: Ușor are doar capitale și orașe mari, cunoscute; Legendar le are
+  pe toate.
 - **Regulile:** butonul **Cum se joacă** din meniu.
 - **Ca aplicație pe telefon:** Android/Chrome: meniul ⋮ → *Adaugă pe ecranul de pornire*.
   iPhone/Safari: *Partajează* → *Adaugă pe ecranul principal*.
@@ -49,7 +52,10 @@ Play with friends via a room code (state syncs through Supabase) or solo against
   towns, with county and population) and 38 tourist attractions (★: castles,
   monasteries, caves, lakes, peaks…), which play in the cardinal variant only. Built from
   the GeoNames dump for Romania by `tools/build-romania.mjs` (see `docs/data.md`).
-- **Lume** — the world cities (top 50 per country), with difficulty tiers.
+- **Lume** — 7 740 world cities, in four difficulties: Ușor plays the 200 best-known
+  (capitals and big cities), Legendar all of them. Cards show the country.
+- **Europa** — 2 232 European cities (Russia up to the Urals, Istanbul and East Thrace),
+  same four difficulties from 85 cities (capitals and 400 000+ cities) up.
 
 Geographic data © GeoNames (CC BY 4.0), credited in the app footer.
 
