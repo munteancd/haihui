@@ -4,7 +4,7 @@ import { listPlayers, getRoom, startGame, saveState, subscribeRoom, sendChat } f
 import { mountChat } from './chat-ui.js';
 import { createGame, needsCheckpoint, ROUND_SIZE } from './game-state.js';
 import { DECKS, DEFAULT_DECK, poolFor } from './decks.js';
-import { isBot, botPlace, botDecideChallenge } from './bot.js';
+import { isBot, botPlace, botDecideChallenge, botNames } from './bot.js';
 
 const app = document.getElementById('app');
 const loadDeck = (deck) => fetch(DECKS[deck].file).then((r) => r.json());
@@ -57,10 +57,11 @@ function enterRoom({ room, me, isHost, deck = DEFAULT_DECK, difficulty = 'legend
 
 // Local single-player game against bots. Everything runs on this device: the human plays
 // their turns; a short timer drives each bot's placement and contra decision.
-async function startSolo({ variant, deck, difficulty, numBots, numRounds, roundSize }) {
+async function startSolo({ variant, deck, difficulty, numBots, numRounds, roundSize, botLevel }) {
   const data = await loadDeck(deck);
   const players = [{ id: 'you', name: 'Tu' }];
-  for (let i = 1; i <= numBots; i++) players.push({ id: `bot${i}`, name: `Bot ${i}`, isBot: true });
+  botNames(numBots).forEach((name, i) =>
+    players.push({ id: `bot${i + 1}`, name, isBot: true, level: botLevel }));
   const state = createGame({
     variant, numRounds, roundSize, deckId: deck, difficulty, seed: Math.floor(Math.random() * 1e9), players,
     cards: poolFor(deck, data, variant, difficulty),
