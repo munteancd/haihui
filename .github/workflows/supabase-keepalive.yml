@@ -1,12 +1,13 @@
 name: Supabase keep-alive
 
 # Free Supabase projects are paused after a week with no traffic, and a paused project
-# breaks multiplayer. This reads the rooms table twice a week so it never goes idle.
+# breaks multiplayer. Supabase wants "a few requests each day", so this reads the rooms
+# table three times, every day.
 # A failed run (red X under Actions) means the project is paused or gone: see
 # docs/supabase-setup.md.
 on:
   schedule:
-    - cron: '17 6 * * 1,4'   # Monday and Thursday, 06:17 UTC
+    - cron: '17 6 * * *'     # every day, 06:17 UTC
   workflow_dispatch:         # "Run workflow" button, for a manual check
 
 permissions:
@@ -22,8 +23,11 @@ jobs:
         run: |
           url=$(sed -n "s/.*SUPABASE_URL = '\(.*\)'.*/\1/p" src/config.js)
           key=$(sed -n "s/.*SUPABASE_ANON_KEY = '\(.*\)'.*/\1/p" src/config.js)
-          curl -fsS "$url/rest/v1/rooms?select=id&limit=1" -H "apikey: $key" -H "Authorization: Bearer $key"
-          echo " <- Supabase is awake"
+          for i in 1 2 3; do
+            curl -fsS --retry 3 --retry-delay 20 "$url/rest/v1/rooms?select=id&limit=1" -H "apikey: $key" -H "Authorization: Bearer $key"
+            echo " <- Supabase is awake ($i)"
+            sleep 30
+          done
 
       # GitHub switches off scheduled workflows in a repository with no commits for 60
       # days. After 45 quiet days, a dated marker commit resets that clock.
