@@ -24,7 +24,7 @@ jobs:
           url=$(sed -n "s/.*SUPABASE_URL = '\(.*\)'.*/\1/p" src/config.js)
           key=$(sed -n "s/.*SUPABASE_ANON_KEY = '\(.*\)'.*/\1/p" src/config.js)
           for i in 1 2 3; do
-            curl -fsS --retry 3 --retry-delay 20 "$url/rest/v1/rooms?select=id&limit=1" -H "apikey: $key" -H "Authorization: Bearer $key"
+            curl -fsS --retry 3 --retry-delay 20 --retry-all-errors "$url/rest/v1/rooms?select=id&limit=1" -H "apikey: $key" -H "Authorization: Bearer $key"
             echo " <- Supabase is awake ($i)"
             sleep 30
           done
